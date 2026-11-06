@@ -1,4 +1,5 @@
 // 12 saatlik mikro tazeleme. Icerik degismediyse lastmod ilerlemez.
+// Spoke makalesinde linkler goreli kalir (/l/:slug) ve spoke sayar; carrier'da hub'a mutlak gider.
 
 import crypto from 'node:crypto';
 import { q, one, ins, withLock, close } from '../packages/core/db.mjs';
@@ -15,7 +16,7 @@ function ozet(s) {
 
 try {
   const domainler = await q(
-    "SELECT id, host, site_id, seed FROM domains WHERE role IN ('carrier','spoke') AND aktif = 1 AND mobil = 0 ORDER BY RAND() LIMIT ?",
+    "SELECT id, host, role, site_id, seed FROM domains WHERE role IN ('carrier','spoke') AND aktif = 1 AND mobil = 0 ORDER BY RAND() LIMIT ?",
     [PARTI]
   );
 
@@ -26,7 +27,7 @@ try {
         tohum: d.seed ?? 1,
         markalar,
         siteAdi: siteAdi(d.site_id),
-        hubUrl: env.HUB_URL,
+        hubUrl: d.role === 'spoke' ? '' : env.HUB_URL,
       });
       const hash = ozet(baslik + govde);
 
@@ -59,7 +60,7 @@ try {
         await q('INSERT IGNORE INTO article_grams (article_id, gram) VALUES (:a, :g)', { a: articleId, g });
       }
 
-      log.info('guncellendi', { host: d.host });
+      log.info('guncellendi', { host: d.host, rol: d.role });
     });
   }
 

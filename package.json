@@ -6,6 +6,7 @@
   "workspaces": ["packages/*", "apps/*"],
   "engines": { "node": ">=22.11.0" },
   "scripts": {
+    "sql": "node scripts/sql.mjs",
     "domain": "node scripts/domain.mjs",
     "linkcheck": "node jobs/linkcheck.mjs",
     "check": "node --check packages/core/config.mjs && node --check packages/core/db.mjs",

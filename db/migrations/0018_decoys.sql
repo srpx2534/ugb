@@ -32,15 +32,26 @@ INSERT INTO decoys (isim, tur, adres, sehir, bolge, posta, tel, eposta, hakkinda
  '{"Monday":"06:00 - 14:00","Tuesday":"06:00 - 14:00","Wednesday":"06:00 - 14:00","Thursday":"06:00 - 14:00","Friday":"06:00 - 15:00","Saturday":"06:00 - 15:00","Sunday":"07:00 - 13:00"}',
  '[{"ad":"Buttermilk Stack","fiyat":"$11"},{"ad":"Chorizo Hash","fiyat":"$14"},{"ad":"Two Egg Plate","fiyat":"$9"},{"ad":"Biscuits & Gravy","fiyat":"$10"},{"ad":"Drip Coffee","fiyat":"$3"},{"ad":"Cinnamon Roll","fiyat":"$5"}]', 4);
 
--- eski JSON kimlikleri tasi, tasiyicilara sirayla dagit
+-- tasiyici sayisi kimlik sayisini asarsa kimlikleri cogalt (uq_decoy tekillik ister)
+SET @tasiyici := (SELECT COUNT(*) FROM domains WHERE role = 'carrier' AND mobil = 0);
+SET @kimlik := (SELECT COUNT(*) FROM decoys);
+SET @eksik := @tasiyici - @kimlik;
+
+INSERT INTO decoys (isim, tur, adres, sehir, bolge, posta, tel, eposta, hakkinda, saatler, menu, fotolar)
+SELECT CONCAT(isim, ' II'), tur, adres, sehir, bolge, posta, tel, eposta, hakkinda, saatler, menu, fotolar
+FROM decoys
+WHERE @eksik > 0 AND id <= @eksik;
+
+-- eski JSON kimlikleri tasi
 UPDATE domains SET decoy_id = 1 WHERE decoy IS NOT NULL;
 
+-- tasiyicilara sirayla, benzersiz dagit
 UPDATE domains d
 JOIN (
   SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS rn
   FROM domains WHERE role = 'carrier' AND mobil = 0
 ) x ON x.id = d.id
-SET d.decoy_id = ((x.rn - 1) % 3) + 1;
+SET d.decoy_id = x.rn;
 
 ALTER TABLE domains ADD UNIQUE KEY uq_decoy (decoy_id);
 ALTER TABLE domains DROP COLUMN decoy;

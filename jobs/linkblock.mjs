@@ -1,10 +1,14 @@
-// hub ve spoke icin display:none link blogu verisi uretir.
-// Hedefler simdilik sabit havuz; 855'lik gercek korpus gelince degisecek.
+// Makale govdesine gizli link blogu verisi uretir: carrier, hub, spoke.
+// Mobil tasiyicilar haric (onlar reklam sayfasi gosterir, makale yok).
+// Marka hedefleri brands tablosundan gelir ve hub uzerinden sayilir.
+// Secim agirligi core/linkblock.mjs icindeki linkSec ile tekilleştirilmiştir.
 
-import { q, close } from '../packages/core/db.mjs';
+import { q, tx, close } from '../packages/core/db.mjs';
+import { env } from '../packages/core/config.mjs';
+import { linkSec, AZAMI } from '../packages/core/linkblock.mjs';
 import { log } from '../packages/core/log.mjs';
 
-const HEDEFLER = [
+const DIS_HEDEFLER = [
   ['Joe Pizza', 'https://www.joespizzanyc.com/', 'isletme'],
   ['Katz Deli', 'https://katzsdelicatessen.com/', 'isletme'],
   ['Grimaldi Pizzeria', 'https://www.grimaldis.com/', 'isletme'],
@@ -33,7 +37,6 @@ const HEDEFLER = [
 ];
 
 const ANCHOR = {
-  marka: ['deneme bonusu', 'deneme bonusu veren siteler', 'bonus sitesi', 'deneme bonusu 2026'],
   bolge: ['bolge rehberi', 'sehir rehberi', 'yerel rehber', 'cevre rehberi'],
   isletme: ['isletme sayfasi', 'isletme rehberi', 'isletme profili'],
   genel: ['detayli bilgi', 'guncel liste', 'kaynak sayfa'],
@@ -56,48 +59,49 @@ function rndUret(seed) {
   };
 }
 
-const AGIRLIK = { marka: 60, bolge: 25, isletme: 10, genel: 5 };
-const AZAMI = 25;
+async function havuz() {
+  const markalar = await q('SELECT ad, slug FROM brands WHERE aktif = 1 ORDER BY id');
+  const hedefler = markalar.map((m) => ({
+    anchor: `${m.ad} deneme bonusu`,
+    hedef: `${env.HUB_URL}/l/${m.slug}`,
+    tur: 'marka',
+  }));
 
-function turSec(rnd) {
-  const toplam = Object.values(AGIRLIK).reduce((a, b) => a + b, 0);
-  let x = rnd() * toplam;
-  for (const [tur, agirlik] of Object.entries(AGIRLIK)) {
-    x -= agirlik;
-    if (x <= 0) return tur;
+  for (const [ad, hedef, tur] of DIS_HEDEFLER) {
+    const rnd = rndUret(tohum(ad));
+    hedefler.push({
+      anchor: `${ad} ${ANCHOR[tur][Math.floor(rnd() * ANCHOR[tur].length)]}`,
+      hedef,
+      tur,
+    });
   }
-  return 'genel';
+  return hedefler;
 }
 
 async function uret(domainId, seed) {
-  const rnd = rndUret(seed);
-  const secilen = [];
-  const havuz = [...HEDEFLER];
+  const adaylar = await havuz();
+  const secilen = linkSec(adaylar, AZAMI, seed);
 
-  while (secilen.length < AZAMI && havuz.length) {
-    const i = Math.floor(rnd() * havuz.length);
-    const [ad, hedef] = havuz.splice(i, 1)[0];
-    const tur = turSec(rnd);
-    const anchor = tur === 'marka' ? `${ad} deneme bonusu` : `${ad} ${ANCHOR[tur][Math.floor(rnd() * ANCHOR[tur].length)]}`;
-    secilen.push({ anchor, hedef, tur });
-  }
+  await tx(async (c) => {
+    await c.execute('DELETE FROM link_blocks WHERE domain_id = ?', [domainId]);
+    let sira = 1;
+    for (const s of secilen) {
+      await c.execute(
+        'INSERT INTO link_blocks (domain_id, sira, anchor, hedef, tur) VALUES (:d, :s, :a, :h, :t)',
+        { d: domainId, s: sira++, a: s.anchor.slice(0, 190), h: s.hedef.slice(0, 500), t: s.tur }
+      );
+    }
+  });
 
-  await q('DELETE FROM link_blocks WHERE domain_id = ?', [domainId]);
-  let sira = 1;
-  for (const s of secilen) {
-    await q(
-      'INSERT INTO link_blocks (domain_id, sira, anchor, hedef, tur) VALUES (:d, :s, :a, :h, :t)',
-      { d: domainId, s: sira++, a: s.anchor.slice(0, 190), h: s.hedef, t: s.tur }
-    );
-  }
   return secilen.length;
 }
 
 try {
-  const hedefler = await q("SELECT id, host, seed FROM domains WHERE role IN ('hub','spoke') AND aktif = 1");
-  if (!hedefler.length) {
-    log.warn('linkblock: hub veya spoke yok');
-  }
+  const hedefler = await q(
+    "SELECT id, host, seed FROM domains WHERE role IN ('carrier','hub','spoke') AND aktif = 1 AND mobil = 0"
+  );
+  if (!hedefler.length) log.warn('linkblock: hedef domain yok');
+
   for (const d of hedefler) {
     const n = await uret(d.id, tohum(d.host) ^ (d.seed ?? 0));
     log.info('linkblock yazildi', { host: d.host, adet: n });

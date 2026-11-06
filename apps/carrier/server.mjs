@@ -5,7 +5,9 @@ import { q, ping, close } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { botMu } from '@ugb/core/bot';
 import { mobilMi } from '@ugb/core/device';
+import { decoyCoz } from '@ugb/core/decoy';
 import { kayitlar } from './routes.mjs';
+import { hata } from './views/hata.mjs';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
@@ -80,9 +82,20 @@ app.get('/health', async (istek) => {
 
 app.register(kayitlar);
 
-app.setErrorHandler((hata, istek, yanit) => {
-  log.error('istek hatasi', { yol: istek.url, hata: hata.message });
-  yanit.code(hata.statusCode ?? 500).type('text/html; charset=utf-8').send('<h1>500</h1>');
+app.setErrorHandler(async (h, istek, yanit) => {
+  log.error('istek hatasi', { yol: istek.url, hata: h.message });
+  const kod = h.statusCode ?? 500;
+  if (!istek.domain || kod === 400) {
+    yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
+    return;
+  }
+  try {
+    const d = await decoyCoz(istek.domain.decoy_id ?? istek.domain.es_decoy_id ?? null);
+    yanit.code(kod).type('text/html; charset=utf-8').header('cache-control', 'no-store');
+    yanit.send(hata(d, `https://${istek.hostname}${istek.url}`, kod));
+  } catch {
+    yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
+  }
 });
 
 await hostmapTazele().catch((e) => log.warn('hostmap ilk yukleme', { hata: e.message }));

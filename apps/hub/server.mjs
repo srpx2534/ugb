@@ -5,6 +5,7 @@ import { log } from '@ugb/core/log';
 import { q, one, ping, close } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
+import { sitemap } from '@ugb/core/html';
 import { istanbulIso } from '@ugb/core/freshness';
 import { portal } from './views/portal.mjs';
 import { panel } from './views/panel.mjs';
@@ -15,7 +16,7 @@ function istemciIp(istek) {
   if (env.TRUST_PROXY) {
     const cf = istek.headers['cf-connecting-ip'];
     if (cf) return cf;
-    const xff = istek.headers['x-forwarded-for'];
+    const xff = istanbulIso ? istek.headers['x-forwarded-for'] : null;
     if (xff) return xff.split(',')[0].trim();
   }
   return istek.ip;
@@ -117,8 +118,9 @@ app.get('/robots.txt', async (istek, yanit) => {
 });
 
 app.get('/sitemap.xml', async (istek, yanit) => {
+  yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
   yanit.type('application/xml; charset=utf-8');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://${istek.hostname}/</loc><lastmod>${istanbulIso(new Date())}</lastmod></url>\n</urlset>\n`;
+  return sitemap(['/'], `https://${istek.hostname}`, istanbulIso(new Date()));
 });
 
 app.setErrorHandler((hata, istek, yanit) => {

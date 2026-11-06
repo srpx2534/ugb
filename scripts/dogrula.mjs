@@ -1,7 +1,12 @@
-// Kullanim: BASE=http://hedefa.com:3001 HOST=hedefa.com node scripts/dogrula.mjs
+// Kullanim: BASE=http://127.0.0.1:3001 HOST=hedefa.com node scripts/dogrula.mjs
+// fetch() Node 26'da ozel Host basligini yok sayar; bu yuzden http.request kullanilir.
 
-const BASE = process.env.BASE ?? 'http://hedefa.com:3001';
+import http from 'node:http';
+import { URL } from 'node:url';
+
+const BASE = process.env.BASE ?? 'http://127.0.0.1:3001';
 const HOST = process.env.HOST ?? 'hedefa.com';
+const SLUG = process.env.SLUG ?? 'ultrabet';
 
 const BOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 const MOBIL = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
@@ -16,16 +21,45 @@ function dene(ad, kosul, ek = '') {
   else { hata++; console.log(`  HATA ${ad}${ek ? ` — ${ek}` : ''}`); }
 }
 
-async function al(yol, ua, ek = {}) {
-  const y = await fetch(BASE + yol, {
-    headers: { host: HOST, 'user-agent': ua, ...ek },
-    redirect: 'manual',
+function al(yol, ua, ek = {}) {
+  const url = new URL(BASE + yol);
+  return new Promise((coz, reddet) => {
+    const istek = http.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || 80,
+        path: url.pathname + url.search,
+        method: 'GET',
+        headers: { host: HOST, 'user-agent': ua, 'accept-encoding': 'identity', ...ek },
+      },
+      (yanit) => {
+        let govde = '';
+        yanit.setEncoding('utf8');
+        yanit.on('data', (p) => { govde += p; });
+        yanit.on('end', () =>
+          coz({ durum: yanit.statusCode, govde, basliklar: new Headers(yanit.headers) })
+        );
+      }
+    );
+    istek.on('error', reddet);
+    istek.setTimeout(15000, () => istek.destroy(new Error('zaman asimi')));
+    istek.end();
   });
-  return { durum: y.status, govde: await y.text(), basliklar: y.headers };
 }
 
 const BOTB = { 'x-ugb-bot': '1' };
 
+console.log('on kontrol:');
+const saglik = await al('/health', MASA);
+dene('sunucu ayakta', saglik.durum === 200, String(saglik.durum));
+if (saglik.durum !== 200) {
+  console.log(`\n${HOST} icin /health ${saglik.durum}. Host kayitli degil ya da sunucu kapali.`);
+  process.exit(1);
+}
+let saglikVeri = {};
+try { saglikVeri = JSON.parse(saglik.govde); } catch { /* yoksay */ }
+dene('host cozuldu', !!saglikVeri.host, saglikVeri.host ?? 'yok');
 
 console.log('makale (bot):');
 const m = await al('/', BOT, BOTB);
@@ -71,9 +105,9 @@ dene('lang en', d.govde.includes('lang="en"'));
 dene('script yok', !d.govde.includes('<script'));
 
 console.log('yonlendirici:');
-const l = await al('/l/ultrabet', MOBIL);
+const l = await al(`/l/${SLUG}`, MOBIL);
 dene('302', l.durum === 302, String(l.durum));
-dene('hub hedefi', (l.basliklar.get('location') ?? '').includes('/l/ultrabet'), l.basliklar.get('location') ?? '');
+dene('hub hedefi', (l.basliklar.get('location') ?? '').includes(`/l/${SLUG}?say=0`), l.basliklar.get('location') ?? '');
 
 console.log('robots:');
 const rb = await al('/robots.txt', MASA);

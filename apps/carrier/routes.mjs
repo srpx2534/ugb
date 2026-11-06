@@ -11,6 +11,7 @@ import { guncelleme, istanbulIso } from '@ugb/core/freshness';
 import { articleLd } from '@ugb/core/jsonld';
 import { makaleAl } from '@ugb/core/makale';
 import { ampSayfa } from '@ugb/core/amp';
+import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
 import { q, one } from '@ugb/core/db';
 import { ev } from './views/ev.mjs';
 import { menu } from './views/menu.mjs';
@@ -20,6 +21,7 @@ import { teslimat } from './views/teslimat.mjs';
 import { galeri } from './views/galeri.mjs';
 import { iletisim } from './views/iletisim.mjs';
 import { reklam } from './views/reklam.mjs';
+import { hata } from './views/hata.mjs';
 
 const VARLIK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../packages/core/assets');
 
@@ -65,6 +67,9 @@ async function makale(istek, yanit) {
     hubUrl: env.HUB_URL,
   });
 
+  const linkler = await linkBlokUret(domain.id, domain.seed ?? domain.es_seed ?? 1);
+  const blok = linkBlokRender(linkler);
+
   const canonical = `https://${domain.host.replace(/^m\./, '')}/`;
   const modified = guncelleme();
   const ld = articleLd({
@@ -86,7 +91,7 @@ async function makale(istek, yanit) {
     canonical,
     baslik,
     aciklama,
-    govde,
+    govde: `${govde}${blok}`,
     modified,
     ld,
     favicon: skin?.favicon,
@@ -110,6 +115,12 @@ async function reklamSayfa(istek, yanit) {
 
 async function decoy(istek) {
   return decoyCoz(istek.domain.decoy_id ?? istek.domain.es_decoy_id ?? null);
+}
+
+async function bulunamadi(istek, yanit) {
+  yanit.code(404).header('cache-control', 'no-store');
+  yanit.type('text/html; charset=utf-8');
+  return hata(await decoy(istek), `https://${istek.hostname}${istek.url}`, 404);
 }
 
 function ipHash(ip) {
@@ -140,10 +151,7 @@ export async function kayitlar(app) {
 
   app.get('/pages/:slug', async (istek, yanit) => {
     const slug = istek.params.slug.replace(/\.html$/, '');
-    if (!slugGecerli(slug) || !SAYFALAR[slug]) {
-      yanit.code(404).type('text/html; charset=utf-8').send('<h1>404</h1>');
-      return;
-    }
+    if (!slugGecerli(slug) || !SAYFALAR[slug]) return bulunamadi(istek, yanit);
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
@@ -153,10 +161,10 @@ export async function kayitlar(app) {
   // Tiklama burada sayilir; hub'a say=0 ile devredilir, hub tekrar saymaz.
   app.get('/l/:slug', async (istek, yanit) => {
     const { slug } = istek.params;
-    if (!slugGecerli(slug)) return yanit.code(404).send('yok');
+    if (!slugGecerli(slug)) return bulunamadi(istek, yanit);
 
     const marka = await one('SELECT id FROM brands WHERE slug = ? AND aktif = 1', [slug]);
-    if (!marka) return yanit.code(404).send('yok');
+    if (!marka) return bulunamadi(istek, yanit);
 
     try {
       await q(
@@ -193,4 +201,6 @@ export async function kayitlar(app) {
     yanit.type('application/xml; charset=utf-8');
     return sitemap(['/'], `https://${istek.hostname.replace(/^m\./, '')}`, istanbulIso(new Date()));
   });
+
+  app.setNotFoundHandler(async (istek, yanit) => bulunamadi(istek, yanit));
 }
