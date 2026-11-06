@@ -12,9 +12,10 @@ const KLASOR = path.join(process.cwd(), 'db', 'migrations');
 const ISARET = '-- rollback';
 const YON = process.argv[2];
 const EVET = process.argv.includes('--evet');
+const KOMUTLAR = ['up', 'down', 'durum', 'eksik-sil', 'checksum-yenile'];
 
-if (!['up', 'down', 'durum', 'eksik-sil'].includes(YON)) {
-  console.error('kullanim: node db/migrate.mjs <up|down|durum|eksik-sil> [--evet]');
+if (!KOMUTLAR.includes(YON)) {
+  console.error('kullanim: node db/migrate.mjs <up|down|durum|eksik-sil|checksum-yenile> [ad] [--evet]');
   process.exit(1);
 }
 
@@ -143,17 +144,13 @@ async function durum() {
   for (const ad of hepsi) {
     console.log(`${gecmis.some((g) => g.ad === ad) ? '[x]' : '[ ]'} ${ad}`);
   }
+
   const eksik = gecmis.filter((g) => !dosyaSet.has(g.ad));
   for (const g of eksik) console.log(`[!] ${g.ad} (uygulanmis, dosya yok)`);
+  if (eksik.length) console.log(`\n${eksik.length} dosyasi olmayan kayit var, "eksik-sil" ile temizlenebilir`);
 
-  const fark = await q();
-  if (fark) console.log(`\n${fark} dosyasi olmayan kayit var, "eksik-sil" ile temizlenebilir`);
-}
-
-async function q() {
-  const gecmis = await uygulanan();
-  const hepsi = new Set((await dosyalar()).map((y) => path.basename(y)));
-  return gecmis.filter((g) => !hepsi.has(g.ad)).length;
+  const bekleyen = hepsi.filter((ad) => !gecmis.some((g) => g.ad === ad));
+  if (bekleyen.length) console.log(`\n${bekleyen.length} bekleyen migration var, "up" ile uygulanir`);
 }
 
 async function eksikSil() {
@@ -169,10 +166,12 @@ async function eksikSil() {
 }
 
 async function checksumYenile(ad) {
+  if (!ad) throw new Error('dosya adi gerekli: node db/migrate.mjs checksum-yenile 0001_init.sql');
   const yol = path.join(KLASOR, ad);
   const icerik = await fs.readFile(yol, 'utf8');
   const [s] = await bag.query('UPDATE schema_migrations SET checksum = ? WHERE ad = ?', [ozet(icerik), ad]);
-  console.log(s.affectedRows ? `checksum yenilendi: ${ad}` : `kayit yok: ${ad}`);
+  if (!s.affectedRows) throw new Error(`schema_migrations icinde kayit yok: ${ad}`);
+  console.log(`checksum yenilendi: ${ad}`);
 }
 
 try {
@@ -180,7 +179,7 @@ try {
   else if (YON === 'down') await down();
   else if (YON === 'durum') await durum();
   else if (YON === 'eksik-sil') await eksikSil();
-  else if (YON === 'checksum-yenile') await checksumYenile(process.argv[3] ?? '');
+  else await checksumYenile(process.argv[3] ?? '');
 } catch (e) {
   console.error(`hata: ${e.message}`);
   process.exitCode = 1;
