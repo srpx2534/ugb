@@ -1,0 +1,120 @@
+import crypto from 'node:crypto';
+import Fastify from 'fastify';
+import { env, hostGecerli, slugGecerli } from '@ugb/core/config';
+import { log } from '@ugb/core/log';
+import { q, one, ping, close } from '@ugb/core/db';
+import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
+import { skinCoz } from '@ugb/core/skins';
+import { siteAdi } from '@ugb/core/siteadi';
+import { guncelleme } from '@ugb/core/freshness';
+import { articleLd } from '@ugb/core/jsonld';
+import { makaleAl } from '@ugb/core/makale';
+import { ampSayfa } from '@ugb/core/amp';
+import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
+
+const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
+
+function ipHash(ip) {
+  return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
+}
+
+app.addHook('onRequest', async (istek, yanit) => {
+  if (!hostGecerli(istek.hostname)) {
+    yanit.code(400).send('gecersiz host');
+    return;
+  }
+  const domain = await hostCoz(istek.hostname);
+  if (!domain) {
+    yanit.code(404).send('bilinmeyen host');
+    return;
+  }
+  istek.domain = domain;
+});
+
+app.get('/', async (istek, yanit) => {
+  const d = istek.domain;
+  const siteId = d.site_id ?? null;
+  const skin = siteId ? await skinCoz(siteId) : null;
+  const ana = skin?.colors?.colors?.primary?.main ?? '#6366F1';
+  const ad = siteAdi(siteId);
+
+  const markalar = await q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
+  const { baslik, aciklama, govde } = await makaleAl({
+    domain: d,
+    markalar,
+    siteAdi: ad,
+    hubUrl: '',
+  });
+
+  const linkler = await linkBlokUret(d.id, d.seed ?? d.es_seed ?? 1);
+  const blok = linkBlokRender(linkler);
+
+  const canonical = `https://${d.host}/`;
+  const modified = guncelleme();
+  const ld = articleLd({
+    baslik,
+    aciklama,
+    canonical,
+    gorsel: `${canonical}assets/img/makale-1.svg`,
+    modified: modified.iso,
+    siteAdi: ad,
+    yayinAdi: ad,
+  });
+
+  yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+  yanit.type('text/html; charset=utf-8');
+  return ampSayfa({
+    d: { ana, ad, rozet: 'Güncel' },
+    canonical,
+    baslik,
+    aciklama,
+    govde: `${govde}${blok}`,
+    modified,
+    ld,
+    favicon: skin?.favicon,
+  });
+});
+
+app.get('/l/:slug', async (istek, yanit) => {
+  const { slug } = istek.params;
+  if (!slugGecerli(slug)) return yanit.code(404).send('yok');
+
+  const marka = await one('SELECT id FROM brands WHERE slug = ? AND aktif = 1', [slug]);
+  if (!marka) return yanit.code(404).send('yok');
+
+  try {
+    await q(
+      'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
+      { d: istek.domain.id, b: marka.id, s: slug, h: ipHash(istek.ip) }
+    );
+  } catch (e) {
+    log.error('click', { hata: e.message });
+  }
+
+  yanit.header('cache-control', 'no-store');
+  return yanit.redirect(`${env.HUB_URL}/l/${slug}`, 302);
+});
+
+app.get('/health', async () => ({ ok: await ping() }));
+
+app.get('/robots.txt', async (istek, yanit) => {
+  yanit.type('text/plain; charset=utf-8');
+  return 'User-agent: *\nAllow: /\n';
+});
+
+app.setErrorHandler((h, istek, yanit) => {
+  log.error('spoke hatasi', { yol: istek.url, hata: h.message });
+  yanit.code(h.statusCode ?? 500).send('hata');
+});
+
+await hostmapTazele().catch((e) => log.warn('hostmap', { hata: e.message }));
+await app.listen({ port: env.PORT, host: '0.0.0.0' });
+log.info('spoke ayakta', { port: env.PORT });
+
+for (const s of ['SIGINT', 'SIGTERM']) {
+  process.on(s, async () => {
+    await app.close();
+    await close();
+    process.exit(0);
+  });
+}

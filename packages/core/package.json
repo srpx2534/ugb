@@ -1,0 +1,24 @@
+{
+  "name": "@ugb/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./siteadi": "./siteadi.mjs",
+    "./config": "./config.mjs",
+    "./db": "./db.mjs",
+    "./hostmap": "./hostmap.mjs",
+    "./log": "./log.mjs",
+    "./bot": "./bot.mjs",
+    "./device": "./device.mjs",
+    "./html": "./html.mjs",
+    "./article": "./article.mjs",
+    "./linkblock": "./linkblock.mjs",
+    "./decoy": "./decoy.mjs",
+    "./skins": "./skins.mjs",
+    "./freshness": "./freshness.mjs",
+    "./jsonld": "./jsonld.mjs",
+    "./amp": "./amp.mjs",
+    "./makale": "./makale.mjs"
+  }
+}

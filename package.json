@@ -1,0 +1,32 @@
+{
+  "name": "ugb",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=22.11.0" },
+  "scripts": {
+    "domain": "node scripts/domain.mjs",
+    "linkcheck": "node jobs/linkcheck.mjs",
+    "check": "node --check packages/core/config.mjs && node --check packages/core/db.mjs",
+    "migrate": "node db/migrate.mjs up",
+    "migrate:down": "node db/migrate.mjs down",
+    "migrate:durum": "node db/migrate.mjs durum",
+    "skins": "node jobs/skins.mjs",
+    "linkblock": "node jobs/linkblock.mjs",
+    "assets": "node jobs/assets.mjs",
+    "dupes": "node jobs/dupes.mjs",
+    "refresh": "node jobs/refresh.mjs",
+    "temizle": "node jobs/temizle.mjs",
+    "test": "vitest run",
+    "dogrula": "node scripts/dogrula.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mysql2": "^3.11.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

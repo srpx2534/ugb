@@ -1,0 +1,12 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+MAILTO=""
+
+# 12 saatlik tazeleme, saatlik tetiklenir, jitter betik icinde
+17 * * * * cd /srv/ugb && /usr/bin/node jobs/refresh.mjs >> /var/log/ugb-refresh.log 2>&1
+# gunluk budama
+40 4 * * * cd /srv/ugb && /usr/bin/node jobs/temizle.mjs >> /var/log/ugb-temizle.log 2>&1
+# haftalik link kontrolu
+25 5 * * 1 cd /srv/ugb && /usr/bin/node jobs/linkcheck.mjs >> /var/log/ugb-linkcheck.log 2>&1
+# gecelik yedek (db sunucusunda calisir)
+15 3 * * * /srv/ugb/jobs/yedek.sh >> /var/log/ugb-yedek.log 2>&1
