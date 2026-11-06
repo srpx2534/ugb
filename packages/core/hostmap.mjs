@@ -11,7 +11,7 @@ let devam = null;
 
 async function tazele() {
   const satirlar = await q(
-    `SELECT id, host, role, kume_id, site_id, decoy_id, mobil, brand_id, seed
+    `SELECT id, host, role, kume_id, site_id, decoy_id, mobil, seed
      FROM domains WHERE aktif = 1`
   );
 

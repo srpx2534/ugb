@@ -1,4 +1,5 @@
 import { one } from './db.mjs';
+import { log } from './log.mjs';
 
 const VARSAYILAN = {
   isim: 'Rittenhouse Grill',
@@ -32,7 +33,19 @@ const VARSAYILAN = {
 };
 
 const TTL_MS = 60_000;
+const OLUMSUZ_TTL_MS = 30_000;
+const UYARI_ARALIK_MS = 5 * 60 * 1000;
+
 const cache = new Map();
+const olumsuz = new Map();
+const uyari = new Map();
+
+function uyar(anahtar, mesaj, ek = {}) {
+  const son = uyari.get(anahtar) ?? 0;
+  if (Date.now() - son < UYARI_ARALIK_MS) return;
+  uyari.set(anahtar, Date.now());
+  log.warn(mesaj, ek);
+}
 
 function birlestir(d) {
   return {
@@ -51,18 +64,29 @@ function jsonCoz(deger, varsayilan) {
 }
 
 export async function decoyCoz(decoyId) {
-  if (!decoyId) return birlestir({});
+  if (!decoyId) {
+    uyar('yok', 'decoy_id tanimli degil, varsayilan kimlik kullaniliyor');
+    return birlestir({});
+  }
 
   const simdi = Date.now();
   const kayit = cache.get(decoyId);
   if (kayit && simdi - kayit.zaman < TTL_MS) return birlestir(kayit.veri);
+
+  const olumsuzZaman = olumsuz.get(decoyId);
+  if (olumsuzZaman && simdi - olumsuzZaman < OLUMSUZ_TTL_MS) return birlestir({});
 
   const satir = await one(
     `SELECT isim, tur, adres, sehir, bolge, posta, tel, eposta, hakkinda, saatler, menu, fotolar
      FROM decoys WHERE id = ? AND aktif = 1`,
     [decoyId]
   );
-  if (!satir) return birlestir({});
+
+  if (!satir) {
+    olumsuz.set(decoyId, simdi);
+    uyar(`id:${decoyId}`, 'decoy bulunamadi ya da pasif, varsayilan kimlik kullaniliyor', { decoy_id: decoyId });
+    return birlestir({});
+  }
 
   satir.saatler = jsonCoz(satir.saatler, {});
   satir.menu = jsonCoz(satir.menu, []);
@@ -73,6 +97,8 @@ export async function decoyCoz(decoyId) {
 
 export function decoyTemizle() {
   cache.clear();
+  olumsuz.clear();
+  uyari.clear();
 }
 
 export function svgYerine(metin, sira) {

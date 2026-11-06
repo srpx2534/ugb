@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=22.11.0" },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.11.0"
+  },
   "scripts": {
     "sql": "node scripts/sql.mjs",
     "domain": "node scripts/domain.mjs",
@@ -28,6 +33,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "amphtml-validator": "^1.0.38",
     "vitest": "^2.1.8"
   }
 }

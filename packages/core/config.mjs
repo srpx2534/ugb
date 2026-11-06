@@ -24,7 +24,7 @@ const Sema = z.object({
   LOG_SEVIYE: z.enum(['info', 'warn', 'error']).default('info'),
   HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
   HUB_HOST: z.string().min(3).default('hedefb.com'),
-  ADMIN_PAROLA: z.string().min(8).default('degistir-bu-parolayi'),
+  ADMIN_PAROLA: z.string().min(8).default('PAROLAPAROLA'),
 });
 
 const sonuc = Sema.safeParse(process.env);
@@ -37,7 +37,7 @@ if (!sonuc.success) {
 
 export const env = Object.freeze(sonuc.data);
 export const isProd = env.NODE_ENV === 'prod';
-export const VARSAYILAN_PAROLA = 'degistir-bu-parolayi';
+export const VARSAYILAN_PAROLA = 'PAROLAPAROLA';
 
 const ETIKET = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 const TLD = /^[a-z0-9]{2,}$/;

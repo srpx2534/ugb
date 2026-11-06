@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import Fastify from 'fastify';
-import { env, isProd, hostGecerli, slugGecerli, VARSAYILAN_PAROLA } from '@ugb/core/config';
+import { env, isProd, hostGecerli, slugGecerli, hostNormalize, VARSAYILAN_PAROLA } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
 import { q, one, ping, close } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -12,11 +12,15 @@ import { panel } from './views/panel.mjs';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
+const DENEME_SINIR = 5;
+const DENEME_PENCERE_MS = 10 * 60 * 1000;
+const denemeler = new Map();
+
 function istemciIp(istek) {
   if (env.TRUST_PROXY) {
     const cf = istek.headers['cf-connecting-ip'];
     if (cf) return cf;
-    const xff = istanbulIso ? istek.headers['x-forwarded-for'] : null;
+    const xff = istek.headers['x-forwarded-for'];
     if (xff) return xff.split(',')[0].trim();
   }
   return istek.ip;
@@ -26,11 +30,49 @@ function ipHash(ip) {
   return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
 }
 
+// sabit zamanli karsilastirma: uzunluk farki ve erken cikis sizdirmaz
+function zamanliEsit(a, b) {
+  const x = crypto.createHash('sha256').update(String(a ?? '')).digest();
+  const y = crypto.createHash('sha256').update(String(b ?? '')).digest();
+  return crypto.timingSafeEqual(x, y);
+}
+
 function yetkili(istek) {
   const h = istek.headers.authorization ?? '';
   if (!h.startsWith('Basic ')) return false;
-  const [k, p] = Buffer.from(h.slice(6), 'base64').toString('utf8').split(':');
-  return k === 'admin' && p === env.ADMIN_PAROLA;
+  const cozulmus = Buffer.from(h.slice(6), 'base64').toString('utf8');
+  const i = cozulmus.indexOf(':');
+  if (i === -1) return false;
+  return zamanliEsit(cozulmus.slice(0, i), 'admin') && zamanliEsit(cozulmus.slice(i + 1), env.ADMIN_PAROLA);
+}
+
+// yanlis denemeyi biriktirir, yeni sayaci doner
+function denemeArttir(ip) {
+  const simdi = Date.now();
+  const k = denemeler.get(ip);
+  if (!k || simdi - k.ilk > DENEME_PENCERE_MS) {
+    denemeler.set(ip, { n: 1, ilk: simdi });
+    return 1;
+  }
+  k.n++;
+  return k.n;
+}
+
+function denemeSifirla(ip) {
+  denemeler.delete(ip);
+}
+
+// tarayici POST'ta Origin gonderir; yabanci origin CSRF demektir.
+// Origin yoksa (curl, sunucu-sunucu) Referer'a, o da yoksa gecise bakilir.
+function originGecerli(istek) {
+  const origin = istek.headers.origin;
+  const referer = istek.headers.referer;
+  const host = istek.hostname;
+  const izinli = [`https://${host}`, `http://${host}`];
+
+  if (origin) return izinli.includes(origin.replace(/\/$/, ''));
+  if (referer) return izinli.some((x) => referer.startsWith(x + '/') || referer === x);
+  return true;
 }
 
 app.addHook('onRequest', async (istek, yanit) => {
@@ -38,7 +80,14 @@ app.addHook('onRequest', async (istek, yanit) => {
     yanit.code(400).send('gecersiz host');
     return;
   }
-  const domain = await hostCoz(istek.hostname);
+  // hub kendi domaini kapali olsa da yonetim icin cevap vermeli
+  const domain =
+    (await hostCoz(istek.hostname)) ??
+    (await one(
+      `SELECT id, host, role, kume_id, site_id, decoy_id, mobil, seed, aktif
+       FROM domains WHERE host = ?`,
+      [hostNormalize(istek.hostname)]
+    ));
   if (!domain) {
     yanit.code(404).send('bilinmeyen host');
     return;
@@ -46,6 +95,26 @@ app.addHook('onRequest', async (istek, yanit) => {
   istek.domain = domain;
   istek.istemciIp = istemciIp(istek);
 });
+
+// Dogru kimlik her zaman gecer; sayac yalniz yanlislari biriktirir.
+// Sinir asilinca 401 yerine 429 ve retry-after doner.
+function kapi(istek, yanit) {
+  if (yetkili(istek)) {
+    denemeSifirla(istek.istemciIp);
+    return true;
+  }
+
+  const n = denemeArttir(istek.istemciIp);
+
+  if (n > DENEME_SINIR) {
+    yanit.header('retry-after', String(Math.ceil(DENEME_PENCERE_MS / 1000)));
+    yanit.code(429).send('cok fazla deneme, sonra tekrar dene');
+    return false;
+  }
+
+  yanit.header('www-authenticate', 'Basic realm="ugb"').code(401).send('yetki');
+  return false;
+}
 
 app.get('/', async (istek, yanit) => {
   const markalar = await q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
@@ -88,10 +157,7 @@ app.get('/l/:slug', async (istek, yanit) => {
 });
 
 app.get('/admin', async (istek, yanit) => {
-  if (!yetkili(istek)) {
-    yanit.header('www-authenticate', 'Basic realm="ugb"').code(401).send('yetki');
-    return;
-  }
+  if (!kapi(istek, yanit)) return;
   const domainler = await q('SELECT id, host, role, aktif FROM domains ORDER BY id');
   const sayim = await q('SELECT domain_id, COUNT(*) AS n FROM clicks GROUP BY domain_id');
   const tiklama = Object.fromEntries(sayim.map((s) => [s.domain_id, s.n]));
@@ -101,10 +167,12 @@ app.get('/admin', async (istek, yanit) => {
 
 // elle kapatma isaretlenir; linkcheck bunu ezmez
 app.post('/admin/domain/:id/durum', async (istek, yanit) => {
-  if (!yetkili(istek)) {
-    yanit.header('www-authenticate', 'Basic realm="ugb"').code(401).send('yetki');
+  if (!originGecerli(istek)) {
+    yanit.code(403).send('yabanci origin');
     return;
   }
+  if (!kapi(istek, yanit)) return;
+
   await q('UPDATE domains SET aktif = 1 - aktif, elle_kapali = 1 WHERE id = ?', [Number(istek.params.id)]);
   await hostmapTazele();
   return yanit.redirect('/admin', 303);
