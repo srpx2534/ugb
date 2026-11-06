@@ -25,7 +25,11 @@ const GOOGLE_UA = [
   'storebot-google',
 ];
 
+// Olumlu sonuc uzun, olumsuz sonuc kisa tutulur: gecici bir DNS hatasi
+// 6 saat boyunca Google'i "bot degil" saymaya yol acmasin.
 const DNS_TTL_MS = 6 * 60 * 60 * 1000;
+const DNS_OLUMSUZ_TTL_MS = 60 * 1000;
+
 const dnsCache = new Map();
 
 function ipSayi(ip) {
@@ -44,9 +48,13 @@ function listede(ip, liste) {
   return liste.some((c) => cidrIcinde(ip, c));
 }
 
+function onbellekle(ip, host, ttl) {
+  dnsCache.set(ip, { host, zaman: Date.now(), ttl });
+}
+
 export async function tersDns(ip) {
   const kayit = dnsCache.get(ip);
-  if (kayit && Date.now() - kayit.zaman < DNS_TTL_MS) return kayit.host;
+  if (kayit && Date.now() - kayit.zaman < kayit.ttl) return kayit.host;
 
   let host = null;
   try {
@@ -54,7 +62,7 @@ export async function tersDns(ip) {
     host = adlar[0] ?? null;
   } catch { host = null; }
 
-  dnsCache.set(ip, { host, zaman: Date.now() });
+  onbellekle(ip, host, host ? DNS_TTL_MS : DNS_OLUMSUZ_TTL_MS);
   return host;
 }
 
@@ -79,9 +87,14 @@ export function secFetchGecerli(basliklar) {
 
 export async function ipGoogleMi(ip) {
   if (!ip || ip.includes(':')) return false;
+
   const host = await tersDns(ip);
   if (!googleHostMu(host)) return false;
-  return ileriDogrula(host, ip);
+
+  const ileri = await ileriDogrula(host, ip);
+  // ters DNS tuttu ama ileri DNS tutmadi: kayit bozuk olabilir, kisa onbellekle
+  if (!ileri) onbellekle(ip, null, DNS_OLUMSUZ_TTL_MS);
+  return ileri;
 }
 
 // true yalnizca Google / Bing / Yandex altyapisindan gelen isteklerde doner.

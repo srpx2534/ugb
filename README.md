@@ -4,8 +4,8 @@ Taşıyıcı / hub / spoke ayrık çalışma alanı. Ortak çekirdek `packages/c
 
 ## Gereksinimler
 
-- Node 22.11+ (`.nvmrc`)
-- MySQL 8.4 LTS
+- Node 22.11 (`.nvmrc`)
+- MySQL 8.4 LTS / MariaDB
 - Windows geliştirme, Linux dağıtım
 
 ## Veritabanı erişimi
@@ -17,10 +17,29 @@ döndürülür.
 
 ## Kurulum
 
-    npm install
+    npm ci
     cp .env.example .env
     # .env doldur
-    npm run migrate
+    npm run migrate -- --evet
+
+`apps/*` altında `.env` tutulmaz: uygulamalar kök `.env`'i okur, cwd'deki dosya
+kök dosyayı ezer.
+
+## Yerel çalıştırma
+
+Portlar `.env`'de değil, başlatma anında verilir. Üç ayrı terminal:
+
+    PORT=3001 node apps/carrier/server.mjs
+    PORT=3002 node apps/hub/server.mjs
+    PORT=3003 node apps/spoke/server.mjs
+
+İstekler `Host` başlığıyla ayrılır:
+
+    curl -s -H "Host: hedefa.com" http://127.0.0.1:3001/health
+
+Bot dalını görmek için `x-ugb-bot: 1` (yalnız `NODE_ENV=dev`).
+
+Prod'da portlar `deploy/ecosystem.cjs` içinde sabittir.
 
 ## Yapı sınırları
 
@@ -35,19 +54,14 @@ döndürülür.
 adreslerine istek gitmez. Veri `db/skins.json` snapshot'ından, görseller
 `packages/core/assets/` altından gelir. `npm run dogrula` bunu denetler.
 
+## Doğrulama
+
+    npx vitest run                 # birim testleri
+    node scripts/kapi-test.mjs     # hub yonetim kapisi
+    npm run dogrula                # kalite kapisi (sunucu ayakta)
+    bash scripts/node22-test.sh    # tam tur, Node 22 ile
+
 ## Belgeler
 
 - `docs/sozlesme.md` — iş ve teknik sözleşme
-
-## Adım sırası
-
-1. Kök dosyalar (bitti)
-2. `packages/core` iskeleti (bitti)
-3. `db/migrations/0001_init.sql` + `db/migrate.mjs` (bitti)
-4. `config.mjs`, `db.mjs`, `hostmap.mjs`, `log.mjs`
-5. `apps/carrier` iskeleti, sonra bot kapısı
-6. Decoy view'ları
-7. Makale render + link bloğu
-8. `apps/hub`, sonra `apps/spoke`
-9. Jobs
-10. Deploy betikleri
+- `docs/runbook.md` — işletim adımları

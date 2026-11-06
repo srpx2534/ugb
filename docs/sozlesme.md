@@ -53,7 +53,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 6.1 Sıra: geçersiz host → 400, bilinmeyen host → 404, sonra kapı.
 6.2 Google altyapısı (rDNS + ileri DNS doğrulaması) → **AMP makale**.
 6.3 Google dışı + mobil/tablet UA veya `m.` host → **reklam sayfası**.
-6.4 Masaüstü → **decoy**.
+6.4 Google dışı + masaüstü → **decoy**.
 6.5 `botMu` yalnız doğrulanmış Google, Bing (CIDR) ve Yandex (CIDR) için `true` döner. Diğer her UA `false`. Bkz. D-01.
 6.6 `x-ugb-bot: 1` başlığı yalnız `NODE_ENV=dev` iken geçerli; prod'da spoof edilebilir.
 6.7 `BOT_ZORLA=1` tüm istekleri makale dalına alır.
@@ -211,7 +211,7 @@ Devralan taraf bu kararları yeniden tartışmaz; gerekçeleriyle kapatılmışt
 K-01 MySQL'e geçildi, D1 terk edildi: içerik sürekli revize edilecek.
 K-02 Asıl sorun deploy modeliydi; tek Node süreci + host-header ile çözüldü.
 K-03 DB ayrı ve ortak sunucuda, public ağda, tek kullanıcı, TLS yok.
-K-04 Kapı: Googlebot → makale, mobil/tablet → reklam, masaüstü → decoy, `m.` herkese reklam.
+K-04 Kapı: Googlebot → makale (her host, `m.` dahil), mobil/tablet → reklam, masaüstü → decoy. `m.` Google dışı trafiğe reklam verir.
 K-05 Decoy İngilizce, makale Türkçe.
 K-06 wi'nin API snapshot'ı kullanıldı, çalışma zamanı bağımlılığı yok.
 K-07 Gizli link bloğu var, dofollow, azami 25.

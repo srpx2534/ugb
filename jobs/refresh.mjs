@@ -1,4 +1,5 @@
 // 12 saatlik mikro tazeleme. Icerik degismediyse lastmod ilerlemez.
+// Kuyruk: hic dokunulmamis domain once, sonra en eski refresh_at.
 // Spoke makalesinde linkler goreli kalir (/l/:slug) ve spoke sayar; carrier'da hub'a mutlak gider.
 
 import crypto from 'node:crypto';
@@ -16,7 +17,11 @@ function ozet(s) {
 
 try {
   const domainler = await q(
-    "SELECT id, host, role, site_id, seed FROM domains WHERE role IN ('carrier','spoke') AND aktif = 1 AND mobil = 0 ORDER BY RAND() LIMIT ?",
+    `SELECT d.id, d.host, d.role, d.site_id, d.seed
+     FROM domains d
+     WHERE d.role IN ('carrier','spoke') AND d.aktif = 1 AND d.mobil = 0
+     ORDER BY d.refresh_at IS NOT NULL, d.refresh_at ASC, d.id ASC
+     LIMIT ?`,
     [PARTI]
   );
 
@@ -34,6 +39,7 @@ try {
       const mevcut = await one('SELECT id, content_hash FROM articles WHERE domain_id = ? AND slug = ?', [d.id, 'index']);
 
       if (mevcut && mevcut.content_hash === hash) {
+        await q('UPDATE domains SET refresh_at = NOW() WHERE id = ?', [d.id]);
         log.info('degisiklik yok', { host: d.host });
         return;
       }
@@ -60,6 +66,7 @@ try {
         await q('INSERT IGNORE INTO article_grams (article_id, gram) VALUES (:a, :g)', { a: articleId, g });
       }
 
+      await q('UPDATE domains SET refresh_at = NOW() WHERE id = ?', [d.id]);
       log.info('guncellendi', { host: d.host, rol: d.role });
     });
   }
