@@ -24,7 +24,6 @@ try {
 
     const uretilen = liste.map((d) => ({
       host: d.host,
-      hubHost: env.HUB_HOST,
       gram: besGram(makaleUret({
         tohum: d.seed ?? 1,
         markalar,

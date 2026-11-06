@@ -1,8 +1,7 @@
 import { kacis } from './html.mjs';
-import { articleLd } from './jsonld.mjs';
 
 const CSS = `
-:root{--ana:#6366F1;--ana-koyu:#4F46E5;--zemin:#0F1117;--kart:#171A23;--cizgi:#252A36;--metin:#E8EAEF;--soluk:#9AA1AF}
+:root{--ana-koyu:#4F46E5;--zemin:#0F1117;--kart:#171A23;--cizgi:#252A36;--metin:#E8EAEF;--soluk:#9AA1AF}
 *{box-sizing:border-box}
 body{margin:0;background:var(--zemin);color:var(--metin);font:16px/1.7 -apple-system,"Segoe UI",Roboto,sans-serif}
 header{position:sticky;top:0;z-index:5;background:rgba(15,17,23,.94);border-bottom:1px solid var(--cizgi);backdrop-filter:blur(8px)}
@@ -32,8 +31,10 @@ footer{border-top:1px solid var(--cizgi);padding:22px 0;font-size:.8rem;color:va
 .gizli-blok{display:none}
 `;
 
-export function ampSayfa({ d, canonical, baslik, aciklama, govde, modified, ld }) {
+export function ampSayfa({ d, canonical, baslik, aciklama, govde, modified, ld, favicon }) {
   const gorsel = `${canonical.replace(/\/$/, '')}/assets/img/makale-1.svg`;
+  const ana = kacis(d.ana);
+  const ikon = kacis(favicon || '/assets/favicon.svg');
   return `<!doctype html>
 <html ⚡ lang="tr">
 <head>
@@ -42,7 +43,7 @@ export function ampSayfa({ d, canonical, baslik, aciklama, govde, modified, ld }
 <title>${kacis(baslik)}</title>
 <meta name="description" content="${kacis(aciklama)}">
 <meta name="robots" content="index, follow, noarchive, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
-<meta name="theme-color" content="${kacis(d.ana)}">
+<meta name="theme-color" content="${ana}">
 <meta property="og:type" content="article">
 <meta property="og:title" content="${kacis(baslik)}">
 <meta property="og:description" content="${kacis(aciklama)}">
@@ -52,10 +53,10 @@ export function ampSayfa({ d, canonical, baslik, aciklama, govde, modified, ld }
 <link rel="alternate" hreflang="tr" href="${kacis(canonical)}">
 <link rel="alternate" hreflang="tr-TR" href="${kacis(canonical)}">
 <link rel="alternate" hreflang="x-default" href="${kacis(canonical)}">
-<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="${ikon}" type="image/svg+xml">
 <script async src="https://cdn.ampproject.org/v0.js"></script>
 <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
-<style amp-custom>${CSS.replace(/\s+/g, ' ')}</style>
+<style amp-custom>:root{--ana:${ana}}${CSS.replace(/\s+/g, ' ')}</style>
 <script type="application/ld+json">${JSON.stringify(ld)}</script>
 </head>
 <body>

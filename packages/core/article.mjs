@@ -122,8 +122,23 @@ const KAPANIS = [
 export function makaleUret({ tohum, markalar, siteAdi, hubUrl }) {
   const rnd = mulberry32(tohum);
   const yil = YIL;
-  const s_ = (d) => sec(rnd, d);
-  const karistir = (d) => [...d].sort(() => rnd() - 0.5);
+  const karistir = (d) => {
+    const h = [...d];
+    for (let i = h.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [h[i], h[j]] = [h[j], h[i]];
+    }
+    return h;
+  };
+  // ayni havuzdan iki farkli paragraf: ust uste ayni metin gelmez
+  const iki = (d) => {
+    const h = karistir(d);
+    return [h[0], h[1] ?? h[0]];
+  };
+
+  const [giris1, giris2] = iki(GIRIS);
+  const [nedir1, nedir2] = iki(NEDIR);
+  const [cev1, cev2] = iki(CEVIRIMSIZ);
 
   const baslik = `Deneme Bonusu Veren Siteler ${yil} — Yatırımsız ve Çevrimsiz Güncel Liste`;
   const aciklama = `${yil} yılında deneme bonusu veren siteler; yatırımsız tutarlar, çevrim şartı, çekim limiti ve mobil uyum üzerinden değerlendirildi.`;
@@ -137,7 +152,7 @@ export function makaleUret({ tohum, markalar, siteAdi, hubUrl }) {
     .join('');
 
   const notlar = secilenMarka.slice(0, 3)
-    .map((m) => `<li><strong>${esc(m.ad)}:</strong> ${esc(s_(NOTLAR))}</li>`)
+    .map((m) => `<li><strong>${esc(m.ad)}:</strong> ${esc(sec(rnd, NOTLAR))}</li>`)
     .join('');
 
   const sss = SSS.map(([s, c]) => `<h3>${esc(s)}</h3><p>${esc(c)}</p>`).join('');
@@ -145,7 +160,7 @@ export function makaleUret({ tohum, markalar, siteAdi, hubUrl }) {
   const govde = `
 <h1>Deneme bonusu veren siteler ${yil} listesinde yatırımsız ve çevrimsiz seçenekler</h1>
 
-<p>${esc(s_(GIRIS))}</p>
+<p>${esc(giris1)}</p>
 
 <figure>
   <amp-img src="/assets/img/makale-1.svg" width="1200" height="630" layout="responsive" alt="Deneme bonusu veren siteler ${yil}"></amp-img>
@@ -154,12 +169,12 @@ export function makaleUret({ tohum, markalar, siteAdi, hubUrl }) {
 <h2>Deneme bonusu veren siteler nasıl değerlendirilir?</h2>
 <p>Değerlendirmede tutar tek ölçüt değildir. Aşağıdaki maddeler kampanyanın gerçek kullanılabilirliğini gösterir ve her biri katılım öncesi tek tek doğrulanmalıdır.</p>
 <ul>${KRITER.map((k) => `<li>${esc(k)}</li>`).join('')}</ul>
-<p>${esc(s_(GIRIS))}</p>
+<p>${esc(giris2)}</p>
 
 <h2>${yil} deneme bonusu karşılaştırma tablosu</h2>
 <p>Tabloda yer alan bilgiler kampanyaların temel yapısını gösterir. Tutar ve koşullar dönemsel olarak değişebilir; tablo sabit bir gerçeklik iddiası taşımaz.</p>
 <div class="tablo-sarmal"><table><thead><tr><th>Site</th><th>Bonus türü</th><th>Miktar</th><th>Çevrim şartı</th><th>Mobil uyum</th></tr></thead><tbody>${tablo}</tbody></table></div>
-<p>${esc(s_(KAPANIS))}</p>
+<p>${esc(sec(rnd, KAPANIS))}</p>
 
 <h2>Platform notları</h2>
 <p>Aşağıdaki notlar tablodaki kampanyaların hangi noktalar üzerinden okunması gerektiğini açıklar.</p>
@@ -170,15 +185,15 @@ export function makaleUret({ tohum, markalar, siteAdi, hubUrl }) {
 </figure>
 
 <h2>Deneme bonusu nedir, nasıl alınır?</h2>
-<p>${esc(s_(NEDIR))}</p>
-<p>${esc(s_(NEDIR))}</p>
+<p>${esc(nedir1)}</p>
+<p>${esc(nedir2)}</p>
 <h3>Adım adım süreç</h3>
 <ol>${NASIL.map((n) => `<li>${esc(n)}</li>`).join('')}</ol>
 <p>Süreç platforma göre kısalır veya uzar; ancak sıra genellikle aynıdır. Hangi adımda ne istendiğini önceden bilmek, sonradan doğrulama sorunu yaşanmasını engeller.</p>
 
 <h2>Çevrimsiz deneme bonusu veren siteler</h2>
-<p>${esc(s_(CEVIRIMSIZ))}</p>
-<p>${esc(s_(CEVIRIMSIZ))}</p>
+<p>${esc(cev1)}</p>
+<p>${esc(cev2)}</p>
 
 <h2>Dikkat edilmesi gerekenler</h2>
 <p>Bonus kullanımı sırasında aşağıdaki maddelerin her biri kazanç iptaline yol açabilir. Aktivasyon öncesi okunmalıdır.</p>

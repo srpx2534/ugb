@@ -24,8 +24,10 @@ max_connect_errors = 1000
 innodb_buffer_pool_size = 1G
 slow_query_log = 1
 long_query_time = 0.5
+log_error = /var/log/mysql/error.log
 CFG
 
+install -d -o mysql -g adm -m 750 /var/log/mysql
 systemctl restart mariadb
 
 mysql -u root <<SQL

@@ -13,8 +13,8 @@ const ISARET = '-- rollback';
 const YON = process.argv[2];
 const EVET = process.argv.includes('--evet');
 
-if (!['up', 'down', 'durum'].includes(YON)) {
-  console.error('kullanim: node db/migrate.mjs <up|down|durum> [--evet]');
+if (!['up', 'down', 'durum', 'eksik-sil'].includes(YON)) {
+  console.error('kullanim: node db/migrate.mjs <up|down|durum|eksik-sil> [--evet]');
   process.exit(1);
 }
 
@@ -83,7 +83,10 @@ async function up() {
 
     if (harita.has(ad)) {
       if (harita.get(ad) !== sum) {
-        throw new Error(`${ad} uygulanmis ama icerigi degismis (checksum uyusmuyor)`);
+        throw new Error(
+          `${ad} uygulanmis ama icerigi degismis (checksum uyusmuyor). ` +
+          `Bilincli duzeltme ise: node db/migrate.mjs checksum-yenile ${ad}`
+        );
       }
       continue;
     }
@@ -108,7 +111,17 @@ async function down() {
 
   const son = gecmis[gecmis.length - 1];
   const yol = path.join(KLASOR, son.ad);
-  const { geri } = bol(await fs.readFile(yol, 'utf8'));
+
+  let icerik;
+  try {
+    icerik = await fs.readFile(yol, 'utf8');
+  } catch {
+    throw new Error(
+      `${son.ad} uygulanmis ama dosyasi yok. Once "node db/migrate.mjs eksik-sil" calistir.`
+    );
+  }
+
+  const { geri } = bol(icerik);
 
   if (process.env.NODE_ENV === 'prod' && !EVET) {
     console.error(`uretim ortami: ${son.ad} geri alinacak, onay icin --evet ekle`);
@@ -125,15 +138,49 @@ async function durum() {
   await tabloKur();
   const gecmis = await uygulanan();
   const hepsi = (await dosyalar()).map((y) => path.basename(y));
+  const dosyaSet = new Set(hepsi);
+
   for (const ad of hepsi) {
     console.log(`${gecmis.some((g) => g.ad === ad) ? '[x]' : '[ ]'} ${ad}`);
   }
+  const eksik = gecmis.filter((g) => !dosyaSet.has(g.ad));
+  for (const g of eksik) console.log(`[!] ${g.ad} (uygulanmis, dosya yok)`);
+
+  const fark = await q();
+  if (fark) console.log(`\n${fark} dosyasi olmayan kayit var, "eksik-sil" ile temizlenebilir`);
+}
+
+async function q() {
+  const gecmis = await uygulanan();
+  const hepsi = new Set((await dosyalar()).map((y) => path.basename(y)));
+  return gecmis.filter((g) => !hepsi.has(g.ad)).length;
+}
+
+async function eksikSil() {
+  await tabloKur();
+  const hepsi = new Set((await dosyalar()).map((y) => path.basename(y)));
+  const gecmis = await uygulanan();
+  const eksik = gecmis.filter((g) => !hepsi.has(g.ad));
+  if (!eksik.length) { console.log('eksik kayit yok'); return; }
+  for (const g of eksik) {
+    await bag.query('DELETE FROM schema_migrations WHERE ad = ?', [g.ad]);
+    console.log(`silindi: ${g.ad}`);
+  }
+}
+
+async function checksumYenile(ad) {
+  const yol = path.join(KLASOR, ad);
+  const icerik = await fs.readFile(yol, 'utf8');
+  const [s] = await bag.query('UPDATE schema_migrations SET checksum = ? WHERE ad = ?', [ozet(icerik), ad]);
+  console.log(s.affectedRows ? `checksum yenilendi: ${ad}` : `kayit yok: ${ad}`);
 }
 
 try {
   if (YON === 'up') await up();
   else if (YON === 'down') await down();
-  else await durum();
+  else if (YON === 'durum') await durum();
+  else if (YON === 'eksik-sil') await eksikSil();
+  else if (YON === 'checksum-yenile') await checksumYenile(process.argv[3] ?? '');
 } catch (e) {
   console.error(`hata: ${e.message}`);
   process.exitCode = 1;

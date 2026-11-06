@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { q, one, ins, withLock, close } from '../packages/core/db.mjs';
 import { env } from '../packages/core/config.mjs';
 import { makaleUret, besGram } from '../packages/core/article.mjs';
+import { siteAdi } from '../packages/core/siteadi.mjs';
 import { log } from '../packages/core/log.mjs';
 
 const PARTI = 4;
@@ -14,17 +15,17 @@ function ozet(s) {
 
 try {
   const domainler = await q(
-    "SELECT id, host, seed FROM domains WHERE role IN ('carrier','spoke') AND aktif = 1 AND mobil = 0 ORDER BY RAND() LIMIT ?",
+    "SELECT id, host, site_id, seed FROM domains WHERE role IN ('carrier','spoke') AND aktif = 1 AND mobil = 0 ORDER BY RAND() LIMIT ?",
     [PARTI]
   );
 
   for (const d of domainler) {
     await withLock(`refresh:${d.id}`, 30, async () => {
       const markalar = await q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1');
-      const { baslik, govde } = makaleUret({
+      const { baslik, aciklama, govde } = makaleUret({
         tohum: d.seed ?? 1,
         markalar,
-        siteAdi: d.host,
+        siteAdi: siteAdi(d.site_id),
         hubUrl: env.HUB_URL,
       });
       const hash = ozet(baslik + govde);
@@ -39,8 +40,8 @@ try {
       let articleId;
       if (mevcut) {
         await q(
-          'UPDATE articles SET baslik = :b, govde = :g, content_hash = :h, lastmod = CURRENT_TIMESTAMP WHERE id = :id',
-          { b: baslik, g: govde, h: hash, id: mevcut.id }
+          'UPDATE articles SET baslik = :b, aciklama = :a, govde = :g, content_hash = :h, lastmod = CURRENT_TIMESTAMP WHERE id = :id',
+          { b: baslik, a: aciklama, g: govde, h: hash, id: mevcut.id }
         );
         await q('DELETE FROM article_grams WHERE article_id = ?', [mevcut.id]);
         await q('INSERT INTO article_versions (article_id, content_hash, govde) VALUES (:a, :h, :g)', {
@@ -49,8 +50,8 @@ try {
         articleId = mevcut.id;
       } else {
         articleId = await ins(
-          'INSERT INTO articles (domain_id, slug, seed, baslik, govde, content_hash) VALUES (:d, :s, :seed, :b, :g, :h)',
-          { d: d.id, s: 'index', seed: d.seed ?? 1, b: baslik, g: govde, h: hash }
+          'INSERT INTO articles (domain_id, slug, seed, baslik, aciklama, govde, content_hash) VALUES (:d, :s, :seed, :b, :a, :g, :h)',
+          { d: d.id, s: 'index', seed: d.seed ?? 1, b: baslik, a: aciklama, g: govde, h: hash }
         );
       }
 

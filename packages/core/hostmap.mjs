@@ -11,26 +11,21 @@ let devam = null;
 
 async function tazele() {
   const satirlar = await q(
-    `SELECT id, host, role, kume_id, site_id, decoy_id, mobil, brand_id, seed, decoy
+    `SELECT id, host, role, kume_id, site_id, decoy_id, mobil, brand_id, seed
      FROM domains WHERE aktif = 1`
   );
 
   const yeni = new Map();
-  for (const s of satirlar) {
-    if (s.decoy) {
-      try { s.decoy = JSON.parse(s.decoy); } catch { s.decoy = null; }
-    }
-    yeni.set(s.host, s);
-  }
+  for (const s of satirlar) yeni.set(s.host, s);
 
-  // m.X, X'in skenini ve decoy'unu devralir
+  // m.X, X'in skenini, decoy'unu ve tohumunu devralir
   for (const s of satirlar) {
     if (!s.mobil) continue;
     const es = yeni.get(s.host.replace(/^m\./, ''));
     const kayit = yeni.get(s.host);
     if (!es || !kayit) continue;
     kayit.es_site_id = es.site_id;
-    kayit.es_decoy = es.decoy ?? null;
+    kayit.es_decoy_id = es.decoy_id;
     kayit.es_seed = es.seed;
   }
 

@@ -1,3 +1,5 @@
+import { one } from './db.mjs';
+
 const VARSAYILAN = {
   isim: 'Rittenhouse Grill',
   tur: 'Kebap & Grill',
@@ -29,8 +31,10 @@ const VARSAYILAN = {
   fotolar: 6,
 };
 
-export function decoyCoz(domain) {
-  const d = domain?.decoy ?? {};
+const TTL_MS = 60_000;
+const cache = new Map();
+
+function birlestir(d) {
   return {
     ...VARSAYILAN,
     ...d,
@@ -38,6 +42,37 @@ export function decoyCoz(domain) {
     menu: Array.isArray(d.menu) && d.menu.length ? d.menu : VARSAYILAN.menu,
     fotolar: Number(d.fotolar ?? VARSAYILAN.fotolar),
   };
+}
+
+function jsonCoz(deger, varsayilan) {
+  if (deger == null) return varsayilan;
+  if (typeof deger !== 'string') return deger;
+  try { return JSON.parse(deger); } catch { return varsayilan; }
+}
+
+export async function decoyCoz(decoyId) {
+  if (!decoyId) return birlestir({});
+
+  const simdi = Date.now();
+  const kayit = cache.get(decoyId);
+  if (kayit && simdi - kayit.zaman < TTL_MS) return birlestir(kayit.veri);
+
+  const satir = await one(
+    `SELECT isim, tur, adres, sehir, bolge, posta, tel, eposta, hakkinda, saatler, menu, fotolar
+     FROM decoys WHERE id = ? AND aktif = 1`,
+    [decoyId]
+  );
+  if (!satir) return birlestir({});
+
+  satir.saatler = jsonCoz(satir.saatler, {});
+  satir.menu = jsonCoz(satir.menu, []);
+
+  cache.set(decoyId, { veri: satir, zaman: simdi });
+  return birlestir(satir);
+}
+
+export function decoyTemizle() {
+  cache.clear();
 }
 
 export function svgYerine(metin, sira) {

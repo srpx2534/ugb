@@ -58,7 +58,6 @@ async function makale(istek, yanit) {
   const ana = skin?.colors?.colors?.primary?.main ?? VARSAYILAN_ANA;
   const ad = siteAdi(siteId);
 
-
   const { baslik, aciklama, govde } = await makaleAl({
     domain,
     markalar: await markalar(),
@@ -109,8 +108,8 @@ async function reklamSayfa(istek, yanit) {
   });
 }
 
-function decoy(istek) {
-  return decoyCoz({ decoy: istek.domain.decoy ?? istek.domain.es_decoy ?? null });
+async function decoy(istek) {
+  return decoyCoz(istek.domain.decoy_id ?? istek.domain.es_decoy_id ?? null);
 }
 
 function ipHash(ip) {
@@ -121,7 +120,7 @@ export async function kayitlar(app) {
   app.get('/assets/*', async (istek, yanit) => {
     const istenen = istek.params['*'];
     const tam = path.resolve(VARLIK, istenen);
-    if (!tam.startsWith(VARLIK)) return yanit.code(404).send('yok');
+    if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
     try {
       const veri = await fs.promises.readFile(tam);
       yanit.type(TUR[path.extname(tam).toLowerCase()] ?? 'application/octet-stream');
@@ -136,7 +135,7 @@ export async function kayitlar(app) {
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
-    return ev(decoy(istek), `https://${istek.hostname}/`);
+    return ev(await decoy(istek), `https://${istek.hostname}/`);
   });
 
   app.get('/pages/:slug', async (istek, yanit) => {
@@ -148,9 +147,10 @@ export async function kayitlar(app) {
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
-    return SAYFALAR[slug](decoy(istek), `https://${istek.hostname}${YOLLAR[slug]}`);
+    return SAYFALAR[slug](await decoy(istek), `https://${istek.hostname}${YOLLAR[slug]}`);
   });
 
+  // Tiklama burada sayilir; hub'a say=0 ile devredilir, hub tekrar saymaz.
   app.get('/l/:slug', async (istek, yanit) => {
     const { slug } = istek.params;
     if (!slugGecerli(slug)) return yanit.code(404).send('yok');
@@ -168,7 +168,7 @@ export async function kayitlar(app) {
     }
 
     yanit.header('cache-control', 'no-store');
-    return yanit.redirect(`${env.HUB_URL}/l/${slug}`, 302);
+    return yanit.redirect(`${env.HUB_URL}/l/${slug}?say=0`, 302);
   });
 
   app.get('/robots.txt', async (istek, yanit) => {

@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { env, hostGecerli, slugGecerli } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
@@ -6,13 +9,37 @@ import { q, one, ping, close } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { skinCoz } from '@ugb/core/skins';
 import { siteAdi } from '@ugb/core/siteadi';
-import { guncelleme } from '@ugb/core/freshness';
+import { guncelleme, istanbulIso } from '@ugb/core/freshness';
 import { articleLd } from '@ugb/core/jsonld';
 import { makaleAl } from '@ugb/core/makale';
 import { ampSayfa } from '@ugb/core/amp';
 import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
+import { sitemap } from '@ugb/core/html';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
+
+const VARLIK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../packages/core/assets');
+
+const TUR = {
+  '.css': 'text/css; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.woff2': 'font/woff2',
+};
+
+function istemciIp(istek) {
+  if (env.TRUST_PROXY) {
+    const cf = istek.headers['cf-connecting-ip'];
+    if (cf) return cf;
+    const xff = istek.headers['x-forwarded-for'];
+    if (xff) return xff.split(',')[0].trim();
+  }
+  return istek.ip;
+}
 
 function ipHash(ip) {
   return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
@@ -29,11 +56,26 @@ app.addHook('onRequest', async (istek, yanit) => {
     return;
   }
   istek.domain = domain;
+  istek.istemciIp = istemciIp(istek);
+});
+
+app.get('/assets/*', async (istek, yanit) => {
+  const istenen = istek.params['*'];
+  const tam = path.resolve(VARLIK, istenen);
+  if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
+  try {
+    const veri = await fs.promises.readFile(tam);
+    yanit.type(TUR[path.extname(tam).toLowerCase()] ?? 'application/octet-stream');
+    yanit.header('cache-control', 'public, max-age=86400');
+    return yanit.send(veri);
+  } catch {
+    return yanit.code(404).send('yok');
+  }
 });
 
 app.get('/', async (istek, yanit) => {
   const d = istek.domain;
-  const siteId = d.site_id ?? null;
+  const siteId = d.site_id ?? d.es_site_id ?? null;
   const skin = siteId ? await skinCoz(siteId) : null;
   const ana = skin?.colors?.colors?.primary?.main ?? '#6366F1';
   const ad = siteAdi(siteId);
@@ -85,21 +127,27 @@ app.get('/l/:slug', async (istek, yanit) => {
   try {
     await q(
       'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
-      { d: istek.domain.id, b: marka.id, s: slug, h: ipHash(istek.ip) }
+      { d: istek.domain.id, b: marka.id, s: slug, h: ipHash(istek.istemciIp) }
     );
   } catch (e) {
     log.error('click', { hata: e.message });
   }
 
   yanit.header('cache-control', 'no-store');
-  return yanit.redirect(`${env.HUB_URL}/l/${slug}`, 302);
+  return yanit.redirect(`${env.HUB_URL}/l/${slug}?say=0`, 302);
 });
 
 app.get('/health', async () => ({ ok: await ping() }));
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
-  return 'User-agent: *\nAllow: /\n';
+  return `User-agent: *\nAllow: /\nSitemap: https://${istek.hostname}/sitemap.xml\n`;
+});
+
+app.get('/sitemap.xml', async (istek, yanit) => {
+  yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+  yanit.type('application/xml; charset=utf-8');
+  return sitemap(['/'], `https://${istek.hostname}`, istanbulIso(new Date()));
 });
 
 app.setErrorHandler((h, istek, yanit) => {

@@ -84,20 +84,21 @@ export async function ipGoogleMi(ip) {
   return ileriDogrula(host, ip);
 }
 
+// true yalnizca Google / Bing / Yandex altyapisindan gelen isteklerde doner.
+// Normal tarayici UA'si false alir; decoy ve reklam sayfasi boylece acik kalir.
 export async function botMu({ ip, ua, basliklar }) {
   const u = String(ua ?? '').toLowerCase();
   if (!u) return false;
 
-  const google = GOOGLE_UA.some((k) => u.includes(k));
-  if (google) {
+  if (GOOGLE_UA.some((k) => u.includes(k))) {
     if (!(await ipGoogleMi(ip))) return false;
     return secFetchGecerli(basliklar);
   }
 
-  if (u.includes('bingbot') && !listede(ip, BING_CIDR)) return false;
-  if (u.includes('yandexbot') && !listede(ip, YANDEX_CIDR)) return false;
+  if (u.includes('bingbot')) return listede(ip, BING_CIDR);
+  if (u.includes('yandexbot')) return listede(ip, YANDEX_CIDR);
 
-  return true;
+  return false;
 }
 
 export function dnsCacheTemizle() {

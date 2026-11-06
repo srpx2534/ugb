@@ -1,4 +1,5 @@
 import { q } from './db.mjs';
+import { kacis } from './html.mjs';
 
 export const AGIRLIK = { marka: 60, bolge: 25, isletme: 10, genel: 5 };
 export const AZAMI = 25;
@@ -24,7 +25,7 @@ export function linkSec(adaylar, adet, tohum) {
 export function linkBlokRender(linkler) {
   if (!linkler?.length) return '';
   const satirlar = linkler
-    .map((l) => `<a href="${l.hedef}" title="${l.anchor}" rel="dofollow">${l.anchor}</a>`)
+    .map((l) => `<a href="${kacis(l.hedef)}" title="${kacis(l.anchor)}" rel="follow">${kacis(l.anchor)}</a>`)
     .join(' · ');
   return `\n<div class="gizli-blok">${satirlar}</div>\n`;
 }

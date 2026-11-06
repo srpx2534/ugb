@@ -70,6 +70,7 @@ app.get('/health', async (istek) => {
     ok: db,
     host: istek.hostname,
     site: istek.domain?.site_id ?? null,
+    decoy: istek.domain?.decoy_id ?? istek.domain?.es_decoy_id ?? null,
     bot: istek.bot ?? false,
     mobil: istek.mobil ?? false,
     makale: istek.makale ?? false,
