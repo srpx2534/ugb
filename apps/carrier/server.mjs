@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { env, isProd, hostGecerli, ipGecerli } from '@ugb/core/config';
+import { env, isProd, hostGecerli, ipGecerli, kokUrlHost } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
 import { q, ping, close } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -9,7 +9,8 @@ import { decoyCoz } from '@ugb/core/decoy';
 import { kayitlar } from './routes.mjs';
 import { hata } from './views/hata.mjs';
 
-const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
+// Tek atlama guvenilir: nginx. Cok atlamali kurulumda XFF'in sag tarafi dogrudur.
+const app = Fastify({ trustProxy: env.TRUST_PROXY ? 1 : false, logger: false });
 
 const KAYITSIZ_YOLLAR = new Set(['/health', '/favicon.ico', '/robots.txt', '/sitemap.xml']);
 
@@ -19,25 +20,22 @@ function baslikMetni(deger) {
 }
 
 function istemciIp(istek) {
-  if (env.TRUST_PROXY) {
+  if (!env.TRUST_PROXY) return istek.ip;
+
+  if (env.CF_ARKADA === '1') {
     const cf = baslikMetni(istek.headers['cf-connecting-ip']);
     if (ipGecerli(cf)) return String(cf).trim();
-    const xff = baslikMetni(istek.headers['x-forwarded-for']);
-    if (xff) {
-      const ilk = String(xff).split(',')[0].trim();
-      if (ipGecerli(ilk)) return ilk;
+  }
+
+  const xff = baslikMetni(istek.headers['x-forwarded-for']);
+  if (xff) {
+    const parcalar = String(xff).split(',');
+    for (let i = parcalar.length - 1; i >= 0; i--) {
+      const aday = parcalar[i].trim();
+      if (ipGecerli(aday)) return aday;
     }
   }
   return istek.ip;
-}
-
-// 404/500 canonical'i: m. ve www. sirayla, kalan parca nokta iceriyorsa
-function kokHostAd(istek) {
-  let h = String(istek.hostname ?? '').toLowerCase();
-  while (h.startsWith('www.')) h = h.slice(4);
-  if (h.startsWith('m.') && h.slice(2).includes('.')) h = h.slice(2);
-  while (h.startsWith('www.')) h = h.slice(4);
-  return h;
 }
 
 app.addHook('onRequest', async (istek, yanit) => {
@@ -71,8 +69,8 @@ app.addHook('onRequest', async (istek, yanit) => {
 
 app.addHook('onResponse', async (istek, yanit) => {
   if (!istek.domain) return;
-  const yol = istek.url.split('?')[0];
-  if (KAYITSIZ_YOLLAR.has(yol) || yol.startsWith('/assets/')) return;
+  const yol = istek.url.split('?')[0].replace(/\/+$/, '') || '/';
+  if (KAYITSIZ_YOLLAR.has(yol) || yol === '/assets' || yol.startsWith('/assets/')) return;
   try {
     await q(
       `INSERT INTO crawl_log (domain_id, ip, ua, yol, durum, bot, mobil)
@@ -121,7 +119,7 @@ app.setErrorHandler(async (h, istek, yanit) => {
     let yol;
     try { yol = encodeURI(istek.url); } catch { yol = istek.url; }
     yanit.code(kod).type('text/html; charset=utf-8').header('cache-control', 'no-store');
-    yanit.send(hata(d, `https://${kokHostAd(istek)}${yol}`, kod));
+    yanit.send(hata(d, `https://${kokUrlHost(istek.hostname)}${yol}`, kod));
   } catch {
     yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
   }

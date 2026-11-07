@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { env, slugGecerli, hostNormalize } from '@ugb/core/config';
+import { env, slugGecerli, kokUrlHost } from '@ugb/core/config';
 import { sitemap } from '@ugb/core/html';
 import { decoyCoz } from '@ugb/core/decoy';
 import { skinCoz } from '@ugb/core/skins';
@@ -48,25 +48,27 @@ const YOLLAR = {
 
 const VARSAYILAN_ANA = '#6366F1';
 const SITEMAP_TABAN_GUN = '2026-01-01';
+const KOK_TTL_MS = 60000;
 
-// canonical tek kaynaktan: DB host'u, o yoksa istek host'u.
-// www. ve m. yalnizca geriye kalan parca hala nokta iceriyorsa soyulur,
-// boylece "m.com" gibi tek etiketli host "com"a dusmez.
-function kokHost(istek) {
-  let h = hostNormalize(istek.domain?.host ?? istek.hostname);
-  while (h.startsWith('www.')) h = h.slice(4);
-  if (h.startsWith('m.') && h.slice(2).includes('.')) h = h.slice(2);
-  while (h.startsWith('www.')) h = h.slice(4);
-  return h;
-}
-
+// canonical tek kaynaktan: DB host'u, o yoksa istek host'u
 function kokUrl(istek) {
-  return `https://${kokHost(istek)}`;
+  return `https://${kokUrlHost(istek.domain?.host ?? istek.hostname)}`;
 }
 
 // Ham URL'yi yuzde kodlamasina cevir: < > " gibi karakterler attribute'a zarar vermez
 function temizYol(istek) {
   try { return encodeURI(istek.url); } catch { return istek.url.replace(/[^\x20-\x7e]/g, ''); }
+}
+
+// Varlik kokunun gercek yolu dakikada bir tazelenir, her istekte syscall yapilmaz
+let kokOnbellek = { deger: VARLIK, zaman: 0 };
+
+async function kokDizin() {
+  if (Date.now() - kokOnbellek.zaman < KOK_TTL_MS) return kokOnbellek.deger;
+  let d = VARLIK;
+  try { d = await fs.promises.realpath(VARLIK); } catch { d = VARLIK; }
+  kokOnbellek = { deger: d, zaman: Date.now() };
+  return d;
 }
 
 // Tiklama sismesini onlemek icin ayni anahtara dakikada en fazla 3 sayim
@@ -196,9 +198,7 @@ async function varlik(istek, yanit) {
   const tam = path.resolve(VARLIK, istenen);
   if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
 
-  // Kok dizin acilista yoksa realpath bir kez daha denenir
-  let kok = VARLIK;
-  try { kok = await fs.promises.realpath(VARLIK); } catch { kok = VARLIK; }
+  const kok = await kokDizin();
 
   let gercek;
   try { gercek = await fs.promises.realpath(tam); } catch { return yanit.code(404).send('yok'); }
@@ -292,7 +292,7 @@ export async function kayitlar(app) {
   app.get('/sitemap.xml', async (istek, yanit) => {
     yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
     yanit.type('application/xml; charset=utf-8');
-    return sitemap(['/', ], kokUrl(istek), await sonDegisim(istek.domain.id));
+    return sitemap(['/'], kokUrl(istek), await sonDegisim(istek.domain.id));
   });
 
   app.setNotFoundHandler(async (istek, yanit) => bulunamadi(istek, yanit));

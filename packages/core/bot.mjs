@@ -124,19 +124,15 @@ async function dnsSahibiMi(ip, hostMu) {
   return ileri;
 }
 
-export async function ipGoogleMi(ip) {
+// IPv4'te CIDR hizli yol, digerlerinde DNS kaniti. Uc bot icin de ayni kural.
+async function botKaniti(ip, cidrListesi, hostMu) {
   if (!ip) return false;
-  // IPv4: CIDR hizli yol, DNS'e her istekte cikilmaz.
-  if (!ipv6Mi(ip) && listede(ip, GOOGLE_CIDR)) return true;
-  return dnsSahibiMi(ip, googleHostMu);
+  if (!ipv6Mi(ip) && listede(ip, cidrListesi)) return true;
+  return dnsSahibiMi(ip, hostMu);
 }
 
-// gevsek yalnizca "kanit yok" durumunda devreye girer; "baska ag" katidir
-async function botKaniti(ip, uaListesi, cidrListesi, hostMu) {
-  const u = String(uaListesi ?? '').toLowerCase();
-  if (!u) return null;
-  if (ipv6Mi(ip)) return dnsSahibiMi(ip, hostMu);
-  return listede(ip, cidrListesi);
+export async function ipGoogleMi(ip) {
+  return botKaniti(ip, GOOGLE_CIDR, googleHostMu);
 }
 
 export async function botMu({ ip, ua, basliklar, gevsek = false }) {
@@ -144,20 +140,19 @@ export async function botMu({ ip, ua, basliklar, gevsek = false }) {
   if (!u) return false;
 
   if (GOOGLE_UA.some((k) => u.includes(k))) {
-    const kanit = await ipGoogleMi(ip);
+    const kanit = await botKaniti(ip, GOOGLE_CIDR, googleHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
-    if (kanit === null && gevsek) return secFetchGecerli(basliklar);
-    return false;
+    return kanit === null && gevsek && secFetchGecerli(basliklar);
   }
 
   if (u.includes('bingbot')) {
-    const kanit = await botKaniti(ip, 'bingbot', BING_CIDR, bingHostMu);
+    const kanit = await botKaniti(ip, BING_CIDR, bingHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
     return kanit === null && gevsek && secFetchGecerli(basliklar);
   }
 
   if (u.includes('yandexbot')) {
-    const kanit = await botKaniti(ip, 'yandexbot', YANDEX_CIDR, yandexHostMu);
+    const kanit = await botKaniti(ip, YANDEX_CIDR, yandexHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
     return kanit === null && gevsek && secFetchGecerli(basliklar);
   }
