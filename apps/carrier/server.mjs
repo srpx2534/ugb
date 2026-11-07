@@ -38,6 +38,18 @@ function istemciIp(istek) {
   return istek.ip;
 }
 
+// ?m=1 mobil surumu zorlar, ?m=0 masaustu surumu zorlar.
+// iPadOS ve in-app tarayicilar masaustu UA gonderdigi icin gerekli.
+function mobilZorla(istek) {
+  const i = istek.url.indexOf('?');
+  if (i === -1) return null;
+  const q2 = new URLSearchParams(istek.url.slice(i + 1));
+  const v = q2.get('m');
+  if (v === '1' || v === 'true') return true;
+  if (v === '0' || v === 'false') return false;
+  return null;
+}
+
 app.addHook('onRequest', async (istek, yanit) => {
   const host = istek.hostname;
   if (!hostGecerli(host)) {
@@ -51,6 +63,10 @@ app.addHook('onRequest', async (istek, yanit) => {
     return;
   }
 
+  yanit.header('x-content-type-options', 'nosniff');
+  yanit.header('referrer-policy', 'strict-origin-when-cross-origin');
+  yanit.header('x-frame-options', 'SAMEORIGIN');
+
   istek.domain = domain;
   istek.istemciIp = istemciIp(istek);
   istek.bot = env.BOT_ZORLA === '1' || (!isProd && istek.headers['x-ugb-bot'] === '1')
@@ -61,7 +77,9 @@ app.addHook('onRequest', async (istek, yanit) => {
         basliklar: istek.headers,
         gevsek: env.BOT_UA_GECER === '1',
       });
-  istek.mobil = mobilMi(istek.headers['user-agent']) || istek.headers['sec-ch-ua-mobile'] === '?1';
+
+  const zorla = mobilZorla(istek);
+  istek.mobil = zorla ?? (mobilMi(istek.headers['user-agent']) || istek.headers['sec-ch-ua-mobile'] === '?1');
   istek.makale = istek.bot;
   // m. host tek basina reklam sebebi degil: masaustunde decoy gorunur
   istek.reklam = !istek.bot && istek.mobil;

@@ -29,7 +29,7 @@ function iste(yol, basliklar = {}) {
         let g = '';
         y.setEncoding('utf8');
         y.on('data', (p) => { g += p; });
-        y.on('end', () => coz({ durum: y.statusCode, govde: g }));
+        y.on('end', () => coz({ durum: y.statusCode, govde: g, basliklar: y.headers }));
       },
     );
     i.on('error', reddet);
@@ -62,6 +62,19 @@ try {
   const d = await iste('/', { 'user-agent': MASA_UA, 'x-forwarded-for': '88.88.88.88' });
   kontrol('decoy dondu (lang=en)', d.govde.includes('lang="en'));
   kontrol('/l/ linki yok', !d.govde.includes('href="/l/'));
+
+  console.log('m kacisi:');
+  const z1 = await iste('/?m=1', { 'user-agent': MASA_UA, 'x-forwarded-for': '88.88.88.88' });
+  kontrol('masaustu + ?m=1 reklam doner', z1.govde.includes('href="/l/'));
+  const z0 = await iste('/?m=0', { 'user-agent': MOBIL_UA, 'x-forwarded-for': '88.88.88.88' });
+  kontrol('mobil + ?m=0 decoy doner', z0.govde.includes('lang="en'));
+  const zb = await iste('/?m=1', { 'user-agent': GOOGLE_UA, 'x-forwarded-for': GOOGLE_IP });
+  kontrol('bot + ?m=1 makale doner', (zb.govde.match(/<p>/g) ?? []).length > 0);
+
+  console.log('guvenlik basliklari:');
+  kontrol('nosniff', z1.basliklar['x-content-type-options'] === 'nosniff');
+  kontrol('referrer-policy', !!z1.basliklar['referrer-policy']);
+  kontrol('x-frame-options', !!z1.basliklar['x-frame-options']);
 
   console.log('canonical tutarliligi:');
   const y404 = await iste('/olmayan-yol', { 'x-forwarded-for': GOOGLE_IP });

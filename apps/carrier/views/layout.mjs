@@ -10,6 +10,8 @@ const SAYFALAR = [
   ['/pages/contact', 'Contact'],
 ];
 
+const STIL_SURUM = '3';
+
 export function layout({ d, aktif, baslik, aciklama, govde, canonical }) {
   const menu = SAYFALAR.map(
     ([yol, ad]) => `<li><a href="${yol}"${yol === aktif ? ' aria-current="page"' : ''}>${ad}</a></li>`
@@ -24,7 +26,7 @@ export function layout({ d, aktif, baslik, aciklama, govde, canonical }) {
 <title>${kacis(baslik)}</title>
 ${meta({ description: aciklama, 'og:title': baslik, 'og:description': aciklama, 'og:type': 'website' })}
 ${canonical ? `<link rel="canonical" href="${kacis(canonical)}">` : ''}
-<link rel="stylesheet" href="/assets/stil.css">
+<link rel="stylesheet" href="/assets/stil.css?v=${STIL_SURUM}">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
 <body>

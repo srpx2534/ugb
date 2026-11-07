@@ -61,6 +61,21 @@ function temizYol(istek) {
   try { return encodeURI(istek.url); } catch { return istek.url.replace(/[^\x20-\x7e]/g, ''); }
 }
 
+// Marka slug'i serbest bicimde gelebilir: buyuk harf, bosluk, tire karisik.
+// Harf/rakam/bosluk/tire disi kabul edilmez, uzunluk 190 ile sinirli.
+function linkSlugGecerli(s) {
+  if (typeof s !== 'string') return false;
+  const t = s.trim();
+  if (!t || t.length > 190) return false;
+  return /^[\p{L}\p{N}][\p{L}\p{N} -]*$/u.test(t);
+}
+
+// "Canlı Maç" hem bosluklu hem tireli gelebilir; iki bicimi de dene
+function slugVaryantlari(s) {
+  const t = String(s ?? '').trim().replace(/\s+/g, ' ');
+  return [...new Set([t, t.replace(/\s+/g, '-'), t.replace(/-/g, ' ')])];
+}
+
 // Varlik kokunun gercek yolu dakikada bir tazelenir, her istekte syscall yapilmaz
 let kokOnbellek = { deger: VARLIK, zaman: 0 };
 
@@ -249,18 +264,22 @@ export async function kayitlar(app) {
 
   // Tiklama burada sayilir; hub'a say=0 ile devredilir, hub tekrar saymaz.
   app.get('/l/:slug', async (istek, yanit) => {
-    const { slug } = istek.params;
-    if (!slugGecerli(slug)) return bulunamadi(istek, yanit);
+    const ham = istek.params.slug;
+    if (!linkSlugGecerli(ham)) return bulunamadi(istek, yanit);
 
-    const marka = await one('SELECT id FROM brands WHERE slug = ? AND aktif = 1', [slug]);
+    const adaylar = slugVaryantlari(ham);
+    const marka = await one(
+      `SELECT id, slug FROM brands WHERE aktif = 1 AND slug IN (${adaylar.map(() => '?').join(', ')}) LIMIT 1`,
+      adaylar
+    );
     if (!marka) return bulunamadi(istek, yanit);
 
     const hash = ipHash(istek.istemciIp);
-    if (tikSayilirMi(`${istek.domain.id}:${slug}:${hash}`)) {
+    if (tikSayilirMi(`${istek.domain.id}:${marka.slug}:${hash}`)) {
       try {
         await q(
           'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
-          { d: istek.domain.id, b: marka.id, s: slug, h: hash }
+          { d: istek.domain.id, b: marka.id, s: marka.slug, h: hash }
         );
       } catch (e) {
         // sayim basarisiz olsa da yonlendirme devam etmeli
@@ -268,7 +287,7 @@ export async function kayitlar(app) {
     }
 
     yanit.header('cache-control', 'no-store');
-    return yanit.redirect(`${env.HUB_URL}/l/${slug}?say=0`, 302);
+    return yanit.redirect(`${env.HUB_URL}/l/${encodeURIComponent(marka.slug)}?say=0`, 302);
   });
 
   app.get('/robots.txt', async (istek, yanit) => {

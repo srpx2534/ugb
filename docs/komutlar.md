@@ -15,3 +15,7 @@ node scripts/domain.mjs cikar ornek.com
 #Dikey Degistirme
 sed -i 's/\r$//' scripts/dikey-degistir.sh
 bash scripts/dikey-degistir.sh canli-mac
+
+#Derleme
+sed -i 's/\r$//' deploy/derle.sh
+bash deploy/derle.sh
