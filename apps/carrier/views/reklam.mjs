@@ -175,7 +175,7 @@ export function reklam({ d, markalar, canonical }) {
   <button type="button" data-git="alt"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M4 4h16v12H8l-4 4z"/></svg>İletişim</button>
 </nav>
 
-<div class="toast" id="toast" aria-live="polite">
+<div class="toast" id="toast" aria-live="polite" aria-atomic="true">
   <a class="kutu" id="toastLink" href="/">
     <span class="ikn">★</span>
     <span class="gov">
@@ -295,6 +295,14 @@ export function reklam({ d, markalar, canonical }) {
 
   yaz();
   sayac = setInterval(yaz, 5400);
+
+  document.addEventListener('visibilitychange', function () {
+    clearInterval(sayac);
+    if (!document.hidden && !kapali) {
+      yaz();
+      sayac = setInterval(yaz, 5400);
+    }
+  });
 })();
 </script>
 

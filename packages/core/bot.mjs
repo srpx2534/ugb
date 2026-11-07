@@ -28,6 +28,7 @@ const GOOGLE_UA = [
 // 6 saat boyunca Google'i "bot degil" saymaya yol acmasin.
 const DNS_TTL_MS = 6 * 60 * 60 * 1000;
 const DNS_OLUMSUZ_TTL_MS = 60 * 1000;
+const DNS_CACHE_UST = 5000;
 
 const dnsCache = new Map();
 
@@ -36,22 +37,37 @@ function ipv6Mi(ip) {
 }
 
 function ipSayi(ip) {
-  const p = ip.split('.').map(Number);
+  const p = String(ip).split('.').map(Number);
+  if (p.length !== 4 || p.some((x) => !Number.isFinite(x))) return NaN;
   return (((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3]) >>> 0;
 }
 
 function cidrIcinde(ip, cidr) {
+  const n = ipSayi(ip);
+  if (Number.isNaN(n)) return false;
   const [ag, maske] = cidr.split('/');
   const m = Number(maske);
   const mask = m === 0 ? 0 : (~0 << (32 - m)) >>> 0;
-  return (ipSayi(ip) & mask) === (ipSayi(ag) & mask);
+  return (n & mask) === (ipSayi(ag) & mask);
 }
 
 function listede(ip, liste) {
   return liste.some((c) => cidrIcinde(ip, c));
 }
 
+// Sinirsiz buyumeyi engelle: once suresi dolmuslari, olmazsa en eskiyi at
 function onbellekle(ip, host, ttl) {
+  if (dnsCache.size >= DNS_CACHE_UST) {
+    const simdi = Date.now();
+    for (const [k, v] of dnsCache) {
+      if (simdi - v.zaman >= v.ttl) dnsCache.delete(k);
+    }
+    while (dnsCache.size >= DNS_CACHE_UST) {
+      const ilk = dnsCache.keys().next().value;
+      if (ilk === undefined) break;
+      dnsCache.delete(ilk);
+    }
+  }
   dnsCache.set(ip, { host, zaman: Date.now(), ttl });
 }
 
@@ -115,6 +131,14 @@ export async function ipGoogleMi(ip) {
   return dnsSahibiMi(ip, googleHostMu);
 }
 
+// gevsek yalnizca "kanit yok" durumunda devreye girer; "baska ag" katidir
+async function botKaniti(ip, uaListesi, cidrListesi, hostMu) {
+  const u = String(uaListesi ?? '').toLowerCase();
+  if (!u) return null;
+  if (ipv6Mi(ip)) return dnsSahibiMi(ip, hostMu);
+  return listede(ip, cidrListesi);
+}
+
 export async function botMu({ ip, ua, basliklar, gevsek = false }) {
   const u = String(ua ?? '').toLowerCase();
   if (!u) return false;
@@ -127,17 +151,15 @@ export async function botMu({ ip, ua, basliklar, gevsek = false }) {
   }
 
   if (u.includes('bingbot')) {
-    const kanit = ipv6Mi(ip) ? await dnsSahibiMi(ip, bingHostMu) : listede(ip, BING_CIDR);
+    const kanit = await botKaniti(ip, 'bingbot', BING_CIDR, bingHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
-    if (kanit === null && gevsek) return secFetchGecerli(basliklar);
-    return gevsek && secFetchGecerli(basliklar);
+    return kanit === null && gevsek && secFetchGecerli(basliklar);
   }
 
   if (u.includes('yandexbot')) {
-    const kanit = ipv6Mi(ip) ? await dnsSahibiMi(ip, yandexHostMu) : listede(ip, YANDEX_CIDR);
+    const kanit = await botKaniti(ip, 'yandexbot', YANDEX_CIDR, yandexHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
-    if (kanit === null && gevsek) return secFetchGecerli(basliklar);
-    return gevsek && secFetchGecerli(basliklar);
+    return kanit === null && gevsek && secFetchGecerli(basliklar);
   }
 
   return false;

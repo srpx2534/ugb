@@ -5,10 +5,16 @@ import { z } from 'zod';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+// Sistem ortami (pm2/systemd) .env tarafindan ezilmemeli
+const SISTEM_ENV = { ...process.env };
+
 envYukle({ path: path.join(KOK, '.env') });
 envYukle({ path: path.join(process.cwd(), '.env'), override: true });
 
+for (const [k, v] of Object.entries(SISTEM_ENV)) process.env[k] = v;
+
 const VARSAYILAN_PAROLA = 'PAROLAPAROLA';
+const VARSAYILAN_TUZ = 'ugb-tuz-degistir';
 
 const Sema = z.object({
   NODE_ENV: z.enum(['dev', 'test', 'prod']).default('dev'),
@@ -24,7 +30,7 @@ const Sema = z.object({
   TRUST_PROXY: z.string().default('false').transform((v) => ['1', 'true', 'evet', 'yes'].includes(v.toLowerCase())),
   BOT_ZORLA: z.enum(['0', '1']).default('0'),
   BOT_UA_GECER: z.enum(['0', '1']).default('1'),
-  HASH_TUZU: z.string().min(8).max(190).default('ugb-tuz-degistir'),
+  HASH_TUZU: z.string().min(8).max(190).default(VARSAYILAN_TUZ),
   LOG_SEVIYE: z.enum(['info', 'warn', 'error']).default('info'),
   HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
   HUB_HOST: z.string().min(3).default('hedefb.com'),
@@ -43,6 +49,9 @@ if (sonuc.data.NODE_ENV === 'prod') {
   if (sonuc.data.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
     console.warn('uyari: prod ortamda ADMIN_PAROLA varsayilan degerde');
   }
+  if (sonuc.data.HASH_TUZU === VARSAYILAN_TUZ) {
+    console.warn('uyari: prod ortamda HASH_TUZU varsayilan degerde');
+  }
   if (/:3002$/.test(sonuc.data.HUB_URL)) {
     console.warn(`uyari: prod ortamda HUB_URL varsayilan portlu (${sonuc.data.HUB_URL})`);
   }
@@ -50,7 +59,7 @@ if (sonuc.data.NODE_ENV === 'prod') {
 
 export const env = Object.freeze(sonuc.data);
 export const isProd = env.NODE_ENV === 'prod';
-export { VARSAYILAN_PAROLA };
+export { VARSAYILAN_PAROLA, VARSAYILAN_TUZ };
 
 const ETIKET = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 const TLD = /^[a-z0-9]{2,}$/;
@@ -67,6 +76,7 @@ export function hostNormalize(host) {
 export function ipGecerli(ip) {
   if (typeof ip !== 'string') return false;
   if (ip.includes(':')) {
+    if (ip === '::') return true;
     if (!/^[0-9a-f:.]{2,45}$/i.test(ip)) return false;
     return /[0-9a-f]/i.test(ip) && !ip.includes(':::');
   }

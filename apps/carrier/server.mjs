@@ -11,17 +11,33 @@ import { hata } from './views/hata.mjs';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
+const KAYITSIZ_YOLLAR = new Set(['/health', '/favicon.ico', '/robots.txt', '/sitemap.xml']);
+
+function baslikMetni(deger) {
+  if (Array.isArray(deger)) return deger[0];
+  return deger;
+}
+
 function istemciIp(istek) {
   if (env.TRUST_PROXY) {
-    const cfHam = istek.headers['cf-connecting-ip'];
-    if (ipGecerli(cfHam)) return String(cfHam).trim();
-    const xff = istek.headers['x-forwarded-for'];
+    const cf = baslikMetni(istek.headers['cf-connecting-ip']);
+    if (ipGecerli(cf)) return String(cf).trim();
+    const xff = baslikMetni(istek.headers['x-forwarded-for']);
     if (xff) {
       const ilk = String(xff).split(',')[0].trim();
       if (ipGecerli(ilk)) return ilk;
     }
   }
   return istek.ip;
+}
+
+// 404/500 canonical'i: m. ve www. sirayla, kalan parca nokta iceriyorsa
+function kokHostAd(istek) {
+  let h = String(istek.hostname ?? '').toLowerCase();
+  while (h.startsWith('www.')) h = h.slice(4);
+  if (h.startsWith('m.') && h.slice(2).includes('.')) h = h.slice(2);
+  while (h.startsWith('www.')) h = h.slice(4);
+  return h;
 }
 
 app.addHook('onRequest', async (istek, yanit) => {
@@ -55,6 +71,8 @@ app.addHook('onRequest', async (istek, yanit) => {
 
 app.addHook('onResponse', async (istek, yanit) => {
   if (!istek.domain) return;
+  const yol = istek.url.split('?')[0];
+  if (KAYITSIZ_YOLLAR.has(yol) || yol.startsWith('/assets/')) return;
   try {
     await q(
       `INSERT INTO crawl_log (domain_id, ip, ua, yol, durum, bot, mobil)
@@ -100,14 +118,20 @@ app.setErrorHandler(async (h, istek, yanit) => {
   }
   try {
     const d = await decoyCoz(istek.domain.decoy_id ?? istek.domain.es_decoy_id ?? null);
+    let yol;
+    try { yol = encodeURI(istek.url); } catch { yol = istek.url; }
     yanit.code(kod).type('text/html; charset=utf-8').header('cache-control', 'no-store');
-    yanit.send(hata(d, `https://${String(istek.hostname).replace(/^m\./, '')}${istek.url}`, kod));
+    yanit.send(hata(d, `https://${kokHostAd(istek)}${yol}`, kod));
   } catch {
     yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
   }
 });
 
 await hostmapTazele().catch((e) => log.warn('hostmap ilk yukleme', { hata: e.message }));
+
+if (isProd && !env.TRUST_PROXY) {
+  log.warn('TRUST_PROXY kapali: nginx arkasinda bot tespiti 127.0.0.1 gorur', { cozum: '.env icinde TRUST_PROXY=true' });
+}
 
 await app.listen({ port: env.PORT, host: '0.0.0.0' });
 log.info('carrier ayakta', { port: env.PORT });

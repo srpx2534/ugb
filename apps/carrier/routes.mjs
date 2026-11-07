@@ -24,8 +24,6 @@ import { reklam } from './views/reklam.mjs';
 import { hata } from './views/hata.mjs';
 
 const VARLIK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../packages/core/assets');
-let VARLIK_GERCEK = VARLIK;
-try { VARLIK_GERCEK = await fs.promises.realpath(VARLIK); } catch { /* dizin yoksa kontrol ayni kalir */ }
 
 const TUR = {
   '.css': 'text/css; charset=utf-8',
@@ -51,19 +49,24 @@ const YOLLAR = {
 const VARSAYILAN_ANA = '#6366F1';
 const SITEMAP_TABAN_GUN = '2026-01-01';
 
-// canonical tek kaynaktan: DB host'u, o yoksa istek host'u; m. ve www. sirayla soyulur
+// canonical tek kaynaktan: DB host'u, o yoksa istek host'u.
+// www. ve m. yalnizca geriye kalan parca hala nokta iceriyorsa soyulur,
+// boylece "m.com" gibi tek etiketli host "com"a dusmez.
 function kokHost(istek) {
   let h = hostNormalize(istek.domain?.host ?? istek.hostname);
-  let onceki;
-  do {
-    onceki = h;
-    h = h.replace(/^(?:m|www)\./, '');
-  } while (h !== onceki);
+  while (h.startsWith('www.')) h = h.slice(4);
+  if (h.startsWith('m.') && h.slice(2).includes('.')) h = h.slice(2);
+  while (h.startsWith('www.')) h = h.slice(4);
   return h;
 }
 
 function kokUrl(istek) {
   return `https://${kokHost(istek)}`;
+}
+
+// Ham URL'yi yuzde kodlamasina cevir: < > " gibi karakterler attribute'a zarar vermez
+function temizYol(istek) {
+  try { return encodeURI(istek.url); } catch { return istek.url.replace(/[^\x20-\x7e]/g, ''); }
 }
 
 // Tiklama sismesini onlemek icin ayni anahtara dakikada en fazla 3 sayim
@@ -76,7 +79,16 @@ function tikSayilirMi(anahtar) {
   const simdi = Date.now();
   const kayit = tikSayac.get(anahtar);
   if (!kayit || simdi > kayit.bitis) {
-    if (tikSayac.size >= TIK_HARITA_UST) tikSayac.clear();
+    if (tikSayac.size >= TIK_HARITA_UST) {
+      for (const [k, v] of tikSayac) {
+        if (simdi > v.bitis) tikSayac.delete(k);
+      }
+      while (tikSayac.size >= TIK_HARITA_UST) {
+        const ilk = tikSayac.keys().next().value;
+        if (ilk === undefined) break;
+        tikSayac.delete(ilk);
+      }
+    }
     tikSayac.set(anahtar, { adet: 1, bitis: simdi + TIK_PENCERE_MS });
     return true;
   }
@@ -172,7 +184,7 @@ async function decoy(istek) {
 async function bulunamadi(istek, yanit) {
   yanit.code(404).header('cache-control', 'no-store');
   yanit.type('text/html; charset=utf-8');
-  return hata(await decoy(istek), `${kokUrl(istek)}${istek.url}`, 404);
+  return hata(await decoy(istek), `${kokUrl(istek)}${temizYol(istek)}`, 404);
 }
 
 function ipHash(ip) {
@@ -184,9 +196,13 @@ async function varlik(istek, yanit) {
   const tam = path.resolve(VARLIK, istenen);
   if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
 
+  // Kok dizin acilista yoksa realpath bir kez daha denenir
+  let kok = VARLIK;
+  try { kok = await fs.promises.realpath(VARLIK); } catch { kok = VARLIK; }
+
   let gercek;
   try { gercek = await fs.promises.realpath(tam); } catch { return yanit.code(404).send('yok'); }
-  if (gercek !== VARLIK_GERCEK && !gercek.startsWith(VARLIK_GERCEK + path.sep)) return yanit.code(404).send('yok');
+  if (gercek !== kok && !gercek.startsWith(kok + path.sep)) return yanit.code(404).send('yok');
 
   try {
     const veri = await fs.promises.readFile(gercek);
@@ -259,12 +275,14 @@ export async function kayitlar(app) {
     return [
       'User-agent: Googlebot',
       'Allow: /',
+      'Disallow: /l/',
       '',
       'User-agent: AdsBot-Google',
       'Allow: /',
       '',
       'User-agent: *',
       'Allow: /',
+      'Disallow: /l/',
       '',
       `Sitemap: ${kokUrl(istek)}/sitemap.xml`,
       '',
@@ -274,7 +292,7 @@ export async function kayitlar(app) {
   app.get('/sitemap.xml', async (istek, yanit) => {
     yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
     yanit.type('application/xml; charset=utf-8');
-    return sitemap(['/'], kokUrl(istek), await sonDegisim(istek.domain.id));
+    return sitemap(['/', ], kokUrl(istek), await sonDegisim(istek.domain.id));
   });
 
   app.setNotFoundHandler(async (istek, yanit) => bulunamadi(istek, yanit));
