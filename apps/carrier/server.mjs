@@ -39,9 +39,10 @@ app.addHook('onRequest', async (istek, yanit) => {
   istek.bot = env.BOT_ZORLA === '1' || (!isProd && istek.headers['x-ugb-bot'] === '1')
     ? true
     : await botMu({ ip: istek.istemciIp, ua: istek.headers['user-agent'], basliklar: istek.headers });
-  istek.mobil = mobilMi(istek.headers['user-agent']);
+  istek.mobil = mobilMi(istek.headers['user-agent']) || istek.headers['sec-ch-ua-mobile'] === '?1';
   istek.makale = istek.bot;
-  istek.reklam = !istek.bot && (istek.mobil || domain.mobil === 1);
+  // m. host tek basina reklam sebebi degil: masaustunde decoy gorunur
+  istek.reklam = !istek.bot && istek.mobil;
 });
 
 app.addHook('onResponse', async (istek, yanit) => {

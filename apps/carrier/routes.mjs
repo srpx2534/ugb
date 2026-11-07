@@ -156,7 +156,7 @@ export async function kayitlar(app) {
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
-    return ev(await decoy(istek), `https://${istek.hostname}/`);
+    return ev(await decoy(istek), `https://${istek.hostname.replace(/^m\./, '')}/`);
   });
 
   app.get('/pages/:slug', async (istek, yanit) => {
@@ -165,7 +165,7 @@ export async function kayitlar(app) {
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
-    return SAYFALAR[slug](await decoy(istek), `https://${istek.hostname}${YOLLAR[slug]}`);
+    return SAYFALAR[slug](await decoy(istek), `https://${istek.hostname.replace(/^m\./, '')}${YOLLAR[slug]}`);
   });
 
   // Tiklama burada sayilir; hub'a say=0 ile devredilir, hub tekrar saymaz.

@@ -1,7 +1,7 @@
 # SÖZLEŞME UGB-2026-001
 
-Sürüm 3.2 — 6 Kasım 2026
-Yürürlük: imza ile. Sürüm 3.1'i geçersiz kılar.
+Sürüm 3.3 — 7 Kasım 2026
+Yürürlük: imza ile. Sürüm 3.2'yi geçersiz kılar.
 Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir dosyasıdır.
 
 ---
@@ -17,8 +17,8 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 ## 2. Mevcut durum
 
 2.1 Kod tabanı `https://github.com/srpx2534/ugb`, dal `main`.
-2.2 Tamamlanan: kök iskelet, `packages/core`, şema ve migration çalıştırıcı, `config/db/hostmap/log`, carrier + bot kapısı, 7 sayfalık decoy, AMP makale + JSON-LD + tazelik, hub (portal, `/l/:slug`, admin, tıklama), spoke, jobs (assets, dupes, refresh, temizle, linkcheck, yedek), deploy betikleri, `scripts/dogrula.mjs`.
-2.3 6 Kasım 2026 ikinci ve üçüncü tur: Bölüm 16'nın tamamı uygulandı, kabul testleri geçti. Ek D işaretlidir.
+2.2 Tamamlanan: kök iskelet, `packages/core`, şema ve migration çalıştırıcı, `config/db/hostmap/log`, carrier + bot kapısı, 7 sayfalık decoy, AMP makale + JSON-LD + tazelik, hub (portal, `/l/:slug`, admin, tıklama), spoke, jobs (assets, dupes, refresh, temizle, linkcheck, yedek), deploy betikleri, `scripts/dogrula.mjs`, `scripts/dogrula2.mjs`.
+2.3 6–7 Kasım 2026 turları: Bölüm 16'nın tamamı uygulandı, kabul testleri geçti. Ek D işaretlidir.
 2.4 Bilinen açık kalmadı; Bölüm 17 dışarıdan bekleyenler listesidir.
 
 ---
@@ -52,11 +52,13 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 
 6.1 Sıra: geçersiz host → 400, bilinmeyen host → 404, sonra kapı.
 6.2 Google altyapısı (rDNS + ileri DNS doğrulaması) → **AMP makale**, her host'ta.
-6.3 Google dışı + mobil/tablet UA veya `m.` host → **reklam sayfası**.
-6.4 Google dışı + masaüstü → **decoy**.
+6.3 Google dışı + mobil/tablet UA → **reklam sayfası**. `m.` host tek başına reklam sebebi değildir.
+6.4 Google dışı + masaüstü (`m.` dahil) → **decoy**.
 6.5 `botMu` yalnız doğrulanmış Google, Bing (CIDR) ve Yandex (CIDR) için `true` döner. Diğer her UA `false`. Bkz. D-01.
 6.6 `x-ugb-bot: 1` başlığı yalnız `NODE_ENV=dev` iken geçerli; prod'da spoof edilebilir.
 6.7 `BOT_ZORLA=1` tüm istekleri makale dalına alır.
+6.8 Mobil tespiti `mobilMi` UA'sına ek olarak `sec-ch-ua-mobile: ?1` başlığını da kabul eder. Chrome UA'sını kısalttığında bu sinyal kaybolmaz.
+6.9 iPadOS masaüstü modu ve UA'sı kısılmış bazı uygulama içi tarayıcılar mobil sayılmaz, decoy görür. Bu bilinçli tercihtir; mobil trafiğin çoğu bu tarayıcılardan geliyorsa `?m=1` kaçışı eklenir (henüz yok).
 
 ---
 
@@ -83,7 +85,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 
 9.1 `packages/core` hiçbir uygulamayı import etmez.
 9.2 `apps/*` birbirini import etmez; ortak her şey core'da.
-9.3 `views/` içinde JavaScript yok, decoy kabuk statik kalır.
+9.3 `views/` içinde JavaScript yok, decoy kabuk statik kalır. Tek istisna `reklam.mjs`: mobil reklam sayfası filtre ve tost betiğini inline taşır, harici dosya yüklemez.
 
 ---
 
@@ -104,6 +106,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 11.5 Makale Türkçe, decoy İngilizce. `lang` ayrı.
 11.6 Gizli link bloğu `display:none`, `rel="follow"`, azami 25. Ağırlık **slot payıdır**: marka 60 / bölge 25 / işletme 10 / genel 5. Havuzdaki eleman sayısı dağılımı bozmaz; kategori tükenirse pay ağırlık sırasına göre kaydırılır. Blok taşıyıcı, hub ve spoke makalesinde basılır.
 11.7 AMP Cache 1 Temmuz 2026'da kapandı. AMP sıralama avantajı için değil, hız için tutulur.
+11.8 Reklam sayfası AMP değildir, tek dosyadır, dış istek yapmaz. Yazı reklamın önüne geçmez: liste bittikten sonra en çok iki paragraf ve bir dikkat bloğu.
 
 ---
 
@@ -143,7 +146,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 15.2 `npm run dupes` 0.45 üstü örtüşme yok.
 15.3 `amphtml-validator` PASS.
 15.4 `npm run migrate:durum` çıktısında `[!]` yok.
-15.5 Gerçek Google IP'sinden tek istek, `crawl_log.bot = 1`.
+15.5 Gerçek Google IP'sinden tek istek, `crawl_log.bot = 1`. Sunucu aşamasında koşulur.
 15.6 `npx vitest run` yeşil.
 15.7 `node scripts/kapi-test.mjs` yeşil.
 15.8 `bash scripts/node22-test.sh` tek turda `TUM ADIMLAR GECTI`.
@@ -153,7 +156,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 
 ## 16. İş emri — kapatılan açıklar
 
-38 maddenin tamamı 6 Kasım 2026 ikinci ve üçüncü turunda kapatıldı. Her satır: madde, düzeltme, kanıt.
+47 maddenin tamamı 6–7 Kasım 2026 turlarında kapatıldı. Her satır: madde, düzeltme, kanıt.
 
 D-01 `bot.mjs` kapı ölü → koşulsuz `true` kaldırıldı, Google/Bing/Yandex sonrası `false`. Kanıt: `gate.test.mjs` 16 test, `dogrula` üç dal yeşil.
 D-02 spoke eksik rota → `/assets/*` ve `/sitemap.xml` eklendi, robots'a `Sitemap:`. Kanıt: asset 200, sitemap tek `<url>`.
@@ -200,6 +203,21 @@ D-36 `README` eskiydi → Node 22, `npm ci`, `--evet`, yerel port kullanımı, `
 D-37 `.env.example` `PORT` taşıyordu → kaldırıldı, K-19 ile uyumlu.
 D-38 `dogrula` yalnız carrier'ı kapsıyordu → `dogrula2` üç uygulamanın ortak kontrollerini ve beş kapı dalını koşar.
 
+### 16.3 Dördüncü turda eklenen maddeler
+
+D-39 Job'lar eşzamanlı çalışabiliyordu → `withLock(ad, saniye, fn)`, tüm job'larda kilit, kilit alınamazsa sessiz çıkış.
+D-40 `db-kur.sh` tek uygulama IP'si alıyordu → `APP_IPLER` döngüsü, her IP için ayrı `GRANT`, ufw'ye hepsi.
+D-41 Çoklu uygulama sunucusunda cron her sunucuda koşuyordu → tek iş sunucusu, çift çalışma `withLock` ile kırılır.
+D-42 IPv6 Googlebot `false` alıyordu → `dnsSahibiMi` ters + ileri DNS kanıtı, `resolve6` eklendi.
+D-43 `sitemap.xml` `lastmod` her istekte "şimdi" oluyordu → `articles.lastmod` gününe bağlandı, `Last-Modified` başlığı eklendi.
+D-44 `Last-Modified` başlığı yoktu → eklendi, `dogrula2` denetler.
+D-45 `dupes.mjs` `siteAdi(d.host)` veriyordu, `siteAdi` `site_id` bekliyor → `d.site_id`.
+
+### 16.4 Beşinci turda eklenen maddeler
+
+D-46 `apps/carrier/server.mjs` reklam dalı `istek.mobil || domain.mobil === 1` idi; `m.` host'a gelen masaüstü tarayıcı da reklam görüyordu, decoy dalı `m.` üzerinde hiç çalışmıyordu → `istek.reklam = !istek.bot && istek.mobil`, `sec-ch-ua-mobile: ?1` desteği, decoy canonical'ı `m.` soyuyor. Kanıt: `dogrula` `m.` bloğu 8/8, `dogrula2` `m. + masaustu` üç dal.
+D-47 Reklam sayfası neredeyse metinsizdi ve masaüstü düzeni mobilde kırılıyordu → referans mobil tasarıma göre yeniden yazıldı (üst affiliate bar, filtre çipleri, premium blok, 3'lü ızgara, alt nav, tost), liste sonuna iki paragraf ve dört maddelik dikkat bloğu eklendi. Kanıt: `dogrula` reklam dalı yeşil, sayfa dış istek yapmıyor.
+
 ---
 
 ## 17. Dışarıdan bekleyenler
@@ -211,9 +229,10 @@ D-38 `dogrula` yalnız carrier'ı kapsıyordu → `dogrula2` üç uygulamanın o
 17.5 Sunucular, DNS, nginx `server_name`, certbot.
 17.6 KVKK aydınlatma metni, Search Console kaydı, Rich Results testi.
 17.7 `deploy/app-kur.sh`'in sunucuda `nginx -t` ile denenmesi.
-17.8 IP v6 ile gelen Googlebot şu an `false` alıyor; IPv6 desteği açık kalem.
-17.9 `sitemap.xml` `lastmod` her istekte "şimdi"; makale `dateModified`'ına bağlanması açık kalem.
-17.10 Reklam sayfası neredeyse metinsiz; doorway riski için birkaç paragraf gerçek metin eklenmeli.
+17.8 IPv6 Googlebot — kapalı (D-42).
+17.9 `sitemap.xml` `lastmod` — kapalı (D-43).
+17.10 Reklam sayfası metni — kapalı (D-47).
+17.11 Mobil UA tespiti için `?m=1` kaçışı — 6.9'daki tarayıcılar için, henüz yok.
 
 ---
 
@@ -224,7 +243,7 @@ Devralan taraf bu kararları yeniden tartışmaz; gerekçeleriyle kapatılmışt
 K-01 MySQL'e geçildi, D1 terk edildi: içerik sürekli revize edilecek.
 K-02 Asıl sorun deploy modeliydi; tek Node süreci + host-header ile çözüldü.
 K-03 DB ayrı ve ortak sunucuda, public ağda, tek kullanıcı, TLS yok.
-K-04 Kapı: Googlebot → makale (her host, `m.` dahil), mobil/tablet → reklam, masaüstü → decoy. `m.` Google dışı trafiğe reklam verir.
+K-04 Kapı: Googlebot → makale (her host, `m.` dahil), mobil/tablet → reklam, masaüstü (`m.` dahil) → decoy.
 K-05 Decoy İngilizce, makale Türkçe.
 K-06 wi'nin API snapshot'ı kullanıldı, çalışma zamanı bağımlılığı yok.
 K-07 Gizli link bloğu var, dofollow, azami 25.
@@ -245,6 +264,7 @@ K-21 Test dosyaları da dahil her değişiklik tam dosya olarak teslim edilir.
 K-22 `apps/*/.env` tutulmaz; cwd `.env` kök `.env`'i eziyor.
 K-23 DNS olumsuz sonucu kısa önbelleklenir (60 sn), olumlu sonuç 6 saat; geçici hata indekslemeyi kesmemeli.
 K-24 Doğrulama tek uygulamaya değil üçüne bakar; kapı dalları ayrıca carrier'da sınanır.
+K-25 `m.` host masaüstünde decoy döner; reklam yalnız mobil UA'ya. Gerekçe: `m.` adresini masaüstünde açan kullanıcı reklam beklemez, restoran sitesi tutarlı kalır.
 
 ---
 
@@ -261,6 +281,7 @@ K-24 Doğrulama tek uygulamaya değil üçüne bakar; kapı dalları ayrıca car
 19.9 Prod'da `x-ugb-bot` başlığına güvenmek.
 19.10 `domains.decoy_id` tekilliğini kaldırmak.
 19.11 Portları `.env`'e geri taşımak.
+19.12 Reklam dalında host adına bakmak (`m.` diye reklam vermek).
 
 ---
 
@@ -324,3 +345,34 @@ node scripts/domain.mjs ekle|cikar|listele
 node jobs/linkblock.mjs
 
 Ek C — Kontrol sorguları
+
+-- kapı sızıntısı: bot=0 ama Google IP
+SELECT COUNT(*) FROM crawl_log
+WHERE bot = 0 AND ip LIKE '66.249.%' AND created_at > NOW() - INTERVAL 1 DAY;
+
+-- decoy tekilliği
+SELECT decoy_id, COUNT() FROM domains WHERE decoy_id IS NOT NULL GROUP BY decoy_id HAVING COUNT() > 1;
+
+-- çift tıklama
+SELECT slug, COUNT() FROM clicks GROUP BY slug, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') HAVING COUNT() > 2;
+
+Ek D — Kabul kontrol listesi
+
+- [x] D-01..D-47 kapalı
+- [x] `dogrula` tüm satırlar ok
+- [x] `dogrula2` tüm satırlar ok
+- [x] `amphtml-validator` PASS
+- [x] `durum` çıktısında `[!]` yok
+- [x] tek tıklama tek `clicks` satırı
+- [x] iki taşıyıcı iki farklı decoy
+- [x] `crawl_log` bot isteğinde `bot = 1`
+- [x] `crawl_log` insan isteğinde `bot = 0`
+- [x] sitemap tek URL
+- [x] çalışma zamanında dış istek yok
+- [x] `m.` + masaüstü decoy döner
+- [x] `m.` + masaüstü canonical `m.` soyulmuş
+- [ ] gerçek Google IP'sinden `bot = 1` (15.5, sunucu aşaması)
+
+Ek E — Stack
+
+Node 22.11+, Fastify 5, mysql2, zod, dotenv, vitest, MariaDB, nginx, PM2, certbot, rclone.

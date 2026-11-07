@@ -74,6 +74,7 @@ console.log('carrier kapi:');
 const decoy = await al('carrier', CARRIER, '/', MASA);
 dene('masaustu decoy', decoy.durum === 200 && decoy.govde.includes('lang="en"'), String(decoy.durum));
 dene('decoy script yok', !decoy.govde.includes('<script'));
+dene('decoy canonical host', decoy.govde.includes(`rel="canonical" href="https://${CARRIER}/"`));
 
 const reklam = await al('carrier', CARRIER, '/', MOBIL);
 dene('mobil reklam', reklam.durum === 200 && !reklam.govde.includes('<html ⚡'));
@@ -86,6 +87,12 @@ dene('m. + mobil reklam', mMobil.durum === 200 && !mMobil.govde.includes('<html 
 
 const mBot = await al('carrier', `m.${CARRIER}`, '/', BOT, { 'x-ugb-bot': '1' });
 dene('m. + bot makale', mBot.durum === 200 && mBot.govde.includes('<html ⚡'));
+dene('m. + bot canonical m. degil', mBot.govde.includes(`rel="canonical" href="https://${CARRIER}/"`));
+
+const mMasa = await al('carrier', `m.${CARRIER}`, '/', MASA);
+dene('m. + masaustu decoy', mMasa.durum === 200 && mMasa.govde.includes('lang="en"'), String(mMasa.durum));
+dene('m. + masaustu reklam degil', !mMasa.govde.includes('href="/l/'));
+dene('m. + masaustu canonical m. degil', mMasa.govde.includes(`rel="canonical" href="https://${CARRIER}/"`));
 
 console.log('hub yonlendirici:');
 const l = await al('hub', HUB, '/l/ultrabet?say=0', MASA);

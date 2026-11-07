@@ -6,6 +6,7 @@ import { URL } from 'node:url';
 
 const BASE = process.env.BASE ?? 'http://127.0.0.1:3001';
 const HOST = process.env.HOST ?? 'hedefa.com';
+const MHOST = `m.${HOST}`;
 const SLUG = process.env.SLUG ?? 'ultrabet';
 
 const BOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
@@ -103,6 +104,27 @@ const d = await al('/', MASA);
 dene('200', d.durum === 200);
 dene('lang en', d.govde.includes('lang="en"'));
 dene('script yok', !d.govde.includes('<script'));
+dene('canonical host', d.govde.includes(`rel="canonical" href="https://${HOST}/"`));
+
+console.log(`m. host (${MHOST}):`);
+const mSaglik = await al('/health', MASA, { host: MHOST });
+if (mSaglik.durum !== 200) {
+  console.log(`  atla ${MHOST} kayitli degil (${mSaglik.durum})`);
+} else {
+  const mMasa = await al('/', MASA, { host: MHOST });
+  dene('m. + masaustu decoy', mMasa.durum === 200 && mMasa.govde.includes('lang="en"'), String(mMasa.durum));
+  dene('m. + masaustu reklam degil', !mMasa.govde.includes('href="/l/'));
+  dene('m. + masaustu canonical m. degil', mMasa.govde.includes(`rel="canonical" href="https://${HOST}/"`));
+  dene('m. + masaustu script yok', !mMasa.govde.includes('<script'));
+
+  const mMobil = await al('/', MOBIL, { host: MHOST });
+  dene('m. + mobil reklam', mMobil.durum === 200 && mMobil.govde.includes('href="/l/'), String(mMobil.durum));
+  dene('m. + mobil amp degil', !mMobil.govde.includes('<html ⚡'));
+
+  const mBot = await al('/', BOT, { host: MHOST, ...BOTB });
+  dene('m. + bot makale', mBot.durum === 200 && mBot.govde.includes('<html ⚡'), String(mBot.durum));
+  dene('m. + bot canonical m. degil', mBot.govde.includes(`rel="canonical" href="https://${HOST}/"`));
+}
 
 console.log('yonlendirici:');
 const l = await al(`/l/${SLUG}`, MOBIL);
