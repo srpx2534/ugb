@@ -11,12 +11,24 @@ import { hata } from './views/hata.mjs';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
+function gecerliIp(s) {
+  if (typeof s !== 'string') return null;
+  const t = s.trim();
+  if (!t) return null;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t)) return t;
+  if (t.includes(':') && /^[0-9a-fA-F:.]+$/.test(t)) return t;
+  return null;
+}
+
 function istemciIp(istek) {
   if (env.TRUST_PROXY) {
-    const cf = istek.headers['cf-connecting-ip'];
+    const cf = gecerliIp(istek.headers['cf-connecting-ip']);
     if (cf) return cf;
     const xff = istek.headers['x-forwarded-for'];
-    if (xff) return xff.split(',')[0].trim();
+    if (xff) {
+      const ilk = gecerliIp(String(xff).split(',')[0]);
+      if (ilk) return ilk;
+    }
   }
   return istek.ip;
 }
@@ -38,7 +50,12 @@ app.addHook('onRequest', async (istek, yanit) => {
   istek.istemciIp = istemciIp(istek);
   istek.bot = env.BOT_ZORLA === '1' || (!isProd && istek.headers['x-ugb-bot'] === '1')
     ? true
-    : await botMu({ ip: istek.istemciIp, ua: istek.headers['user-agent'], basliklar: istek.headers });
+    : await botMu({
+        ip: istek.istemciIp,
+        ua: istek.headers['user-agent'],
+        basliklar: istek.headers,
+        gevsek: env.BOT_UA_GECER === '1',
+  });
   istek.mobil = mobilMi(istek.headers['user-agent']) || istek.headers['sec-ch-ua-mobile'] === '?1';
   istek.makale = istek.bot;
   // m. host tek basina reklam sebebi degil: masaustunde decoy gorunur

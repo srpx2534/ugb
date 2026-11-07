@@ -26,6 +26,7 @@
     "temizle": "node jobs/temizle.mjs",
     "test": "vitest run",
     "kapi-test": "node scripts/kapi-test.mjs",
+    "bot-test": "node scripts/bot-test.mjs",
     "node22": "bash scripts/node22-test.sh",
     "dogrula2": "node scripts/dogrula2.mjs",
     "dogrula": "node scripts/dogrula.mjs"
