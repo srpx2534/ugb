@@ -1,5 +1,5 @@
 // Kapi UA testleri. Tek komut: BASE=http://127.0.0.1:3001 HOST=m.hedefa.com npm run bot-test
-// Sunucu ayakta olmali, .env icinde BOT_UA_GECER=1 ve TRUST_PROXY=1 bulunmali.
+// Sunucu ayakta olmali, .env icinde BOT_UA_GECER=1 ve TRUST_PROXY=true bulunmali.
 
 import http from 'node:http';
 
@@ -62,6 +62,18 @@ try {
   const d = await iste('/', { 'user-agent': MASA_UA, 'x-forwarded-for': '88.88.88.88' });
   kontrol('decoy dondu (lang=en)', d.govde.includes('lang="en'));
   kontrol('/l/ linki yok', !d.govde.includes('href="/l/'));
+
+  console.log('canonical tutarliligi:');
+  const y404 = await iste('/olmayan-yol', { 'x-forwarded-for': GOOGLE_IP });
+  kontrol('404 canonical m. degil', !y404.govde.includes('https://m.'));
+  const rb = await iste('/robots.txt');
+  kontrol('robots sitemap m. degil', !rb.govde.includes('https://m.'));
+  const prot1 = await iste('/pages/constructor');
+  kontrol('/pages/constructor 404', prot1.durum === 404, String(prot1.durum));
+  const prot2 = await iste('/pages/toString');
+  kontrol('/pages/toString 404', prot2.durum === 404, String(prot2.durum));
+  const prot3 = await iste('/pages/menu');
+  kontrol('/pages/menu 200', prot3.durum === 200, String(prot3.durum));
 
   console.log(hata ? `\n${hata} hata` : '\ntum bot kontrolleri gecti');
   process.exitCode = hata ? 1 : 0;

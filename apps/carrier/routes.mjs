@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { env, slugGecerli } from '@ugb/core/config';
+import { env, slugGecerli, hostNormalize } from '@ugb/core/config';
 import { sitemap } from '@ugb/core/html';
 import { decoyCoz } from '@ugb/core/decoy';
 import { skinCoz } from '@ugb/core/skins';
@@ -24,6 +24,8 @@ import { reklam } from './views/reklam.mjs';
 import { hata } from './views/hata.mjs';
 
 const VARLIK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../packages/core/assets');
+let VARLIK_GERCEK = VARLIK;
+try { VARLIK_GERCEK = await fs.promises.realpath(VARLIK); } catch { /* dizin yoksa kontrol ayni kalir */ }
 
 const TUR = {
   '.css': 'text/css; charset=utf-8',
@@ -47,18 +49,56 @@ const YOLLAR = {
 };
 
 const VARSAYILAN_ANA = '#6366F1';
+const SITEMAP_TABAN_GUN = '2026-01-01';
+
+// canonical tek kaynaktan: DB host'u, o yoksa istek host'u; m. ve www. sirayla soyulur
+function kokHost(istek) {
+  let h = hostNormalize(istek.domain?.host ?? istek.hostname);
+  let onceki;
+  do {
+    onceki = h;
+    h = h.replace(/^(?:m|www)\./, '');
+  } while (h !== onceki);
+  return h;
+}
+
+function kokUrl(istek) {
+  return `https://${kokHost(istek)}`;
+}
+
+// Tiklama sismesini onlemek icin ayni anahtara dakikada en fazla 3 sayim
+const TIK_PENCERE_MS = 60 * 1000;
+const TIK_UST = 3;
+const TIK_HARITA_UST = 5000;
+const tikSayac = new Map();
+
+function tikSayilirMi(anahtar) {
+  const simdi = Date.now();
+  const kayit = tikSayac.get(anahtar);
+  if (!kayit || simdi > kayit.bitis) {
+    if (tikSayac.size >= TIK_HARITA_UST) tikSayac.clear();
+    tikSayac.set(anahtar, { adet: 1, bitis: simdi + TIK_PENCERE_MS });
+    return true;
+  }
+  if (kayit.adet >= TIK_UST) return false;
+  kayit.adet += 1;
+  return true;
+}
 
 async function markalar() {
   return q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
 }
 
-// sitemap lastmod: makalenin son degisim gunu, yoksa bugun (Istanbul)
+// sitemap lastmod: makalenin son degisimi, yoksa domain olusturulma gunu, yoksa sabit taban
 async function sonDegisim(domainId) {
   const satir = await one(
-    "SELECT DATE_FORMAT(lastmod, '%Y-%m-%d') AS gun FROM articles WHERE domain_id = ? AND slug = 'index'",
+    `SELECT DATE_FORMAT(COALESCE(a.lastmod, d.created_at), '%Y-%m-%d') AS gun
+       FROM domains d
+       LEFT JOIN articles a ON a.domain_id = d.id AND a.slug = 'index'
+      WHERE d.id = ?`,
     [domainId]
   );
-  return satir?.gun ?? istanbulIso(new Date()).slice(0, 10);
+  return satir?.gun ?? SITEMAP_TABAN_GUN;
 }
 
 async function makale(istek, yanit) {
@@ -79,7 +119,7 @@ async function makale(istek, yanit) {
   const linkler = await linkBlokUret(domain.id, domain.seed ?? domain.es_seed ?? 1);
   const blok = linkBlokRender(linkler);
 
-  const canonical = `https://${domain.host.replace(/^m\./, '')}/`;
+  const canonical = `${kokUrl(istek)}/`;
   const modified = guncelleme();
   const ld = articleLd({
     baslik,
@@ -115,11 +155,13 @@ async function reklamSayfa(istek, yanit) {
   const ana = skin?.colors?.colors?.primary?.main ?? VARSAYILAN_ANA;
 
   yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+  yanit.header('pragma', 'no-cache');
+  yanit.header('expires', '0');
   yanit.type('text/html; charset=utf-8');
   return reklam({
     d: { ana, ad: siteAdi(siteId), tarih: guncelleme().gorunur },
     markalar: await markalar(),
-    canonical: `https://${domain.host.replace(/^m\./, '')}/`,
+    canonical: `${kokUrl(istek)}/`,
   });
 }
 
@@ -130,25 +172,45 @@ async function decoy(istek) {
 async function bulunamadi(istek, yanit) {
   yanit.code(404).header('cache-control', 'no-store');
   yanit.type('text/html; charset=utf-8');
-  return hata(await decoy(istek), `https://${istek.hostname}${istek.url}`, 404);
+  return hata(await decoy(istek), `${kokUrl(istek)}${istek.url}`, 404);
 }
 
 function ipHash(ip) {
-  return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
+  return crypto.createHash('sha256').update(`${env.HASH_TUZU}:${String(ip ?? '')}`).digest('hex');
+}
+
+async function varlik(istek, yanit) {
+  const istenen = istek.params['*'];
+  const tam = path.resolve(VARLIK, istenen);
+  if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
+
+  let gercek;
+  try { gercek = await fs.promises.realpath(tam); } catch { return yanit.code(404).send('yok'); }
+  if (gercek !== VARLIK_GERCEK && !gercek.startsWith(VARLIK_GERCEK + path.sep)) return yanit.code(404).send('yok');
+
+  try {
+    const veri = await fs.promises.readFile(gercek);
+    yanit.type(TUR[path.extname(gercek).toLowerCase()] ?? 'application/octet-stream');
+    yanit.header('x-content-type-options', 'nosniff');
+    yanit.header('cache-control', 'public, max-age=86400');
+    return yanit.send(veri);
+  } catch {
+    return yanit.code(404).send('yok');
+  }
 }
 
 export async function kayitlar(app) {
-  app.get('/assets/*', async (istek, yanit) => {
-    const istenen = istek.params['*'];
-    const tam = path.resolve(VARLIK, istenen);
-    if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
+  app.get('/assets/*', varlik);
+
+  app.get('/favicon.ico', async (istek, yanit) => {
     try {
-      const veri = await fs.promises.readFile(tam);
-      yanit.type(TUR[path.extname(tam).toLowerCase()] ?? 'application/octet-stream');
+      const veri = await fs.promises.readFile(path.join(VARLIK, 'favicon.ico'));
+      yanit.type('image/x-icon');
+      yanit.header('x-content-type-options', 'nosniff');
       yanit.header('cache-control', 'public, max-age=86400');
       return yanit.send(veri);
     } catch {
-      return yanit.code(404).send('yok');
+      return yanit.code(204).send();
     }
   });
 
@@ -156,16 +218,16 @@ export async function kayitlar(app) {
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
-    return ev(await decoy(istek), `https://${istek.hostname.replace(/^m\./, '')}/`);
+    return ev(await decoy(istek), `${kokUrl(istek)}/`);
   });
 
   app.get('/pages/:slug', async (istek, yanit) => {
     const slug = istek.params.slug.replace(/\.html$/, '');
-    if (!slugGecerli(slug) || !SAYFALAR[slug]) return bulunamadi(istek, yanit);
+    if (!slugGecerli(slug) || !Object.hasOwn(SAYFALAR, slug)) return bulunamadi(istek, yanit);
     if (istek.makale) return makale(istek, yanit);
     if (istek.reklam) return reklamSayfa(istek, yanit);
     yanit.type('text/html; charset=utf-8');
-    return SAYFALAR[slug](await decoy(istek), `https://${istek.hostname.replace(/^m\./, '')}${YOLLAR[slug]}`);
+    return SAYFALAR[slug](await decoy(istek), `${kokUrl(istek)}${YOLLAR[slug]}`);
   });
 
   // Tiklama burada sayilir; hub'a say=0 ile devredilir, hub tekrar saymaz.
@@ -176,13 +238,16 @@ export async function kayitlar(app) {
     const marka = await one('SELECT id FROM brands WHERE slug = ? AND aktif = 1', [slug]);
     if (!marka) return bulunamadi(istek, yanit);
 
-    try {
-      await q(
-        'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
-        { d: istek.domain.id, b: marka.id, s: slug, h: ipHash(istek.istemciIp) }
-      );
-    } catch (e) {
-      // sayim basarisiz olsa da yonlendirme devam etmeli
+    const hash = ipHash(istek.istemciIp);
+    if (tikSayilirMi(`${istek.domain.id}:${slug}:${hash}`)) {
+      try {
+        await q(
+          'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
+          { d: istek.domain.id, b: marka.id, s: slug, h: hash }
+        );
+      } catch (e) {
+        // sayim basarisiz olsa da yonlendirme devam etmeli
+      }
     }
 
     yanit.header('cache-control', 'no-store');
@@ -201,16 +266,15 @@ export async function kayitlar(app) {
       'User-agent: *',
       'Allow: /',
       '',
-      `Sitemap: https://${istek.hostname.replace(/^m\./, '')}/sitemap.xml`,
+      `Sitemap: ${kokUrl(istek)}/sitemap.xml`,
       '',
     ].join('\n');
   });
 
   app.get('/sitemap.xml', async (istek, yanit) => {
-    const kok = `https://${istek.hostname.replace(/^m\./, '')}`;
     yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
     yanit.type('application/xml; charset=utf-8');
-    return sitemap(['/'], kok, await sonDegisim(istek.domain.id));
+    return sitemap(['/'], kokUrl(istek), await sonDegisim(istek.domain.id));
   });
 
   app.setNotFoundHandler(async (istek, yanit) => bulunamadi(istek, yanit));

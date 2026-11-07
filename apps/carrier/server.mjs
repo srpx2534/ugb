@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { env, isProd, hostGecerli } from '@ugb/core/config';
+import { env, isProd, hostGecerli, ipGecerli } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
 import { q, ping, close } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -11,23 +11,14 @@ import { hata } from './views/hata.mjs';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
-function gecerliIp(s) {
-  if (typeof s !== 'string') return null;
-  const t = s.trim();
-  if (!t) return null;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t)) return t;
-  if (t.includes(':') && /^[0-9a-fA-F:.]+$/.test(t)) return t;
-  return null;
-}
-
 function istemciIp(istek) {
   if (env.TRUST_PROXY) {
-    const cf = gecerliIp(istek.headers['cf-connecting-ip']);
-    if (cf) return cf;
+    const cfHam = istek.headers['cf-connecting-ip'];
+    if (ipGecerli(cfHam)) return String(cfHam).trim();
     const xff = istek.headers['x-forwarded-for'];
     if (xff) {
-      const ilk = gecerliIp(String(xff).split(',')[0]);
-      if (ilk) return ilk;
+      const ilk = String(xff).split(',')[0].trim();
+      if (ipGecerli(ilk)) return ilk;
     }
   }
   return istek.ip;
@@ -55,7 +46,7 @@ app.addHook('onRequest', async (istek, yanit) => {
         ua: istek.headers['user-agent'],
         basliklar: istek.headers,
         gevsek: env.BOT_UA_GECER === '1',
-  });
+      });
   istek.mobil = mobilMi(istek.headers['user-agent']) || istek.headers['sec-ch-ua-mobile'] === '?1';
   istek.makale = istek.bot;
   // m. host tek basina reklam sebebi degil: masaustunde decoy gorunur
@@ -110,7 +101,7 @@ app.setErrorHandler(async (h, istek, yanit) => {
   try {
     const d = await decoyCoz(istek.domain.decoy_id ?? istek.domain.es_decoy_id ?? null);
     yanit.code(kod).type('text/html; charset=utf-8').header('cache-control', 'no-store');
-    yanit.send(hata(d, `https://${istek.hostname}${istek.url}`, kod));
+    yanit.send(hata(d, `https://${String(istek.hostname).replace(/^m\./, '')}${istek.url}`, kod));
   } catch {
     yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
   }

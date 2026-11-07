@@ -22,7 +22,7 @@ body{margin:0;background:#0B0D12;color:#fff;font:15px/1.5 system-ui,-apple-syste
 .sayi{flex:0 0 auto;font-size:10.5px;font-weight:700;color:#C7CFDB;border:1px solid #232A38;background:#161B26;padding:3px 6px;border-radius:6px;font-variant-numeric:tabular-nums}
 .sayi b{color:var(--ana)}
 
-.cipler{display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none;mask-image:linear-gradient(90deg,#000 92%,transparent)}
+.cipler{display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent);mask-image:linear-gradient(90deg,#000 92%,transparent)}
 .cipler::-webkit-scrollbar{display:none}
 .cip{flex:0 0 auto;height:32px;padding:0 11px;border-radius:9px;border:1px solid #232A38;background:#12161F;color:#C7CFDB;font:700 12px system-ui;display:flex;align-items:center;gap:6px;cursor:pointer}
 .cip[aria-pressed="true"]{background:linear-gradient(135deg,var(--ana),color-mix(in srgb,var(--ana) 70%,#000));border-color:transparent;color:#111}
@@ -54,14 +54,14 @@ h2 span{margin-left:auto;font-size:10.5px;font-weight:600;color:#8B95A5}
 
 footer{margin-top:20px;padding:16px 0 4px;border-top:1px solid #1B212C;color:#7C8492;font-size:11px;line-height:1.6}
 
-nav.alt{position:fixed;left:0;right:0;bottom:0;z-index:45;max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:54px;padding-bottom:env(safe-area-inset-bottom);border-top:1px solid #2E3646;border-radius:14px 14px 0 0;background:rgba(11,13,18,.94);backdrop-filter:blur(14px)}
+nav.alt{position:fixed;left:0;right:0;bottom:0;z-index:45;max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:54px;padding-bottom:env(safe-area-inset-bottom);border-top:1px solid #2E3646;border-radius:14px 14px 0 0;background:rgba(11,13,18,.94);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 nav.alt button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:none;padding:0;color:#8B95A5;font:600 10px system-ui}
 nav.alt button.on{color:#fff}
 nav.alt button.orta span.top{position:absolute;top:-18px;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;border:4px solid #0B0D12;background:linear-gradient(135deg,var(--ana),color-mix(in srgb,var(--ana) 70%,#000));color:#111}
 nav.alt button.orta span.lbl{padding-top:22px}
 
 .toast{position:fixed;left:0;right:0;bottom:110px;z-index:44;display:flex;justify-content:center;padding:0 10px;pointer-events:none}
-.toast .kutu{position:relative;display:flex;align-items:center;gap:9px;width:100%;max-width:312px;padding:7px 30px 7px 8px;border-radius:14px;border:1px solid color-mix(in srgb,var(--ana) 40%,transparent);background:rgba(22,27,38,.94);backdrop-filter:blur(12px);text-decoration:none;color:inherit;overflow:hidden;pointer-events:auto;box-shadow:0 10px 28px -8px rgba(0,0,0,.55)}
+.toast .kutu{position:relative;display:flex;align-items:center;gap:9px;width:100%;max-width:312px;padding:7px 30px 7px 8px;border-radius:14px;border:1px solid color-mix(in srgb,var(--ana) 40%,transparent);background:rgba(22,27,38,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);text-decoration:none;color:inherit;overflow:hidden;pointer-events:auto;box-shadow:0 10px 28px -8px rgba(0,0,0,.55)}
 .toast .ikn{width:30px;height:30px;flex:0 0 30px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--ana) 18%,transparent);border:1px solid color-mix(in srgb,var(--ana) 35%,transparent);color:var(--ana);font-size:14px}
 .toast .gov{flex:1;min-width:0}
 .toast .ust{display:block;font-size:10.5px;color:#8B95A5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -70,7 +70,8 @@ nav.alt button.orta span.lbl{padding-top:22px}
 .toast .alt i{font-style:normal;font-size:10.5px;font-weight:600;color:#8B95A5}
 .toast .bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.06)}
 .toast .bar span{display:block;height:100%;transform-origin:left;background:linear-gradient(90deg,color-mix(in srgb,var(--ana) 70%,#000),var(--ana))}
-.toast .kapat{position:absolute;top:50%;right:5px;transform:translateY(-50%);width:24px;height:24px;border:0;border-radius:50%;background:none;color:rgba(255,255,255,.5);font-size:12px}
+.toast .kapat{position:absolute;top:50%;right:5px;transform:translateY(-50%);width:24px;height:24px;display:grid;place-items:center;border-radius:50%;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer}
+.toast .kapat:focus-visible{outline:2px solid var(--ana);outline-offset:1px}
 @keyframes ilerle{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 @media (prefers-reduced-motion:reduce){.toast .bar span{animation:none!important}}
 `;
@@ -85,7 +86,7 @@ export function reklam({ d, markalar, canonical }) {
 
   const en = liste[0];
   const premium = liste.slice(0, 4);
-  const kalan = liste.slice(4);
+  const trendAdet = Math.max(0, liste.length - premium.length);
 
   const bannerlar = premium
     .map(
@@ -96,8 +97,8 @@ export function reklam({ d, markalar, canonical }) {
 
   const kartlar = liste
     .map((m, i) => {
-      const grup = i < 4 ? 'premium' : 'trend';
-      return `<a class="kart" data-g="${grup}" data-a="${kacis(String(m.ad).toLowerCase())}" href="/l/${kacis(m.slug)}"><span class="kut">${kacis(m.ad)}</span><b>${kacis(m.teklif ?? 'Deneme bonusu')}</b><small>${kacis(m.ad)}</small><span class="btn">Bonusu Al</span></a>`;
+      const grup = i < premium.length ? 'premium' : 'trend';
+      return `<a class="kart" data-g="${grup}" data-a="${kacis(`${m.ad} ${m.teklif ?? ''}`.toLowerCase())}" href="/l/${kacis(m.slug)}"><span class="kut">${kacis(m.ad)}</span><b>${kacis(m.teklif ?? 'Deneme bonusu')}</b><small>${kacis(m.ad)}</small><span class="btn">Bonusu Al</span></a>`;
     })
     .join('');
 
@@ -127,13 +128,13 @@ export function reklam({ d, markalar, canonical }) {
   <div class="ara">
     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg>
     <input id="ara" type="search" inputmode="search" placeholder="Site veya bonus ara…" aria-label="Site veya bonus ara">
-    <span class="sayi"><b>${liste.length}</b> site</span>
+    <span class="sayi"><b id="sayi">${liste.length}</b> site</span>
   </div>
 
-  <div class="cipler" role="group" aria-label="Liste filtresi">
+  <div class="cipler" role="group" aria-label="Liste filtresi" id="cipler">
     <button class="cip" data-m="hepsi" aria-pressed="true" type="button">Tümü <b>${liste.length}</b></button>
-    <button class="cip" data-m="trend" aria-pressed="false" type="button">Trend Siteler <b>${liste.length}</b></button>
-    <button class="cip" data-m="premium" aria-pressed="false" type="button">Premium Siteler</button>
+    <button class="cip" data-m="trend" aria-pressed="false" type="button">Trend Siteler <b>${trendAdet}</b></button>
+    <button class="cip" data-m="premium" aria-pressed="false" type="button">Premium Siteler <b>${premium.length}</b></button>
   </div>
 
   <section id="premium">
@@ -167,7 +168,7 @@ export function reklam({ d, markalar, canonical }) {
 </main>
 
 <nav class="alt">
-  <button type="button" class="on" data-git="hepsi"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Anasayfa</button>
+  <button type="button" class="on" data-git="hepsi" aria-current="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Anasayfa</button>
   <button type="button" data-git="premium"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg>Oyun Seçici</button>
   <button type="button" class="orta" data-git="ust"><span class="top"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2 1.4 5.9L19 12l-5.6 2.1L12 20l-1.4-5.9L5 12l5.6-2.1z"/></svg></span><span class="lbl">Çark</span></button>
   <button type="button" data-git="trend"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 6h18v5a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/></svg>Çekilişler</button>
@@ -182,7 +183,7 @@ export function reklam({ d, markalar, canonical }) {
       <span class="alt" id="tTutar">— <i>kazandı</i></span>
     </span>
     <span class="bar"><span id="tBar"></span></span>
-    <button class="kapat" id="toastKapat" type="button" aria-label="Kapat">✕</button>
+    <span class="kapat" id="toastKapat" role="button" tabindex="0" aria-label="Kapat">✕</span>
   </a>
 </div>
 
@@ -190,6 +191,7 @@ export function reklam({ d, markalar, canonical }) {
 (function () {
   var havuz = ${jsonGuvenli(havuz)};
   var ara = document.getElementById('ara');
+  var sayi = document.getElementById('sayi');
   var cipler = [].slice.call(document.querySelectorAll('.cip'));
   var kartlar = [].slice.call(document.querySelectorAll('.kart'));
   var premiumBolum = document.getElementById('premium');
@@ -209,6 +211,7 @@ export function reklam({ d, markalar, canonical }) {
     premiumBolum.classList.toggle('gizle', !pGorun);
     grid.classList.toggle('gizle', gorunen === 0);
     bos.classList.toggle('gizle', gorunen > 0 || !!pGorun);
+    sayi.textContent = String(gorunen);
   }
 
   function sec(yeni) {
@@ -222,22 +225,30 @@ export function reklam({ d, markalar, canonical }) {
   });
   ara.addEventListener('input', uygula);
 
-  [].slice.call(document.querySelectorAll('nav.alt button')).forEach(function (b) {
+  function git(hedef) {
+    if (hedef === 'ust') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      sec('hepsi');
+      return;
+    }
+    if (hedef === 'alt') {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    sec(hedef);
+    document.getElementById('cipler').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  var altlar = [].slice.call(document.querySelectorAll('nav.alt button'));
+  altlar.forEach(function (b) {
     b.addEventListener('click', function () {
-      var hedef = b.getAttribute('data-git');
-      [].slice.call(document.querySelectorAll('nav.alt button')).forEach(function (x) { x.classList.remove('on'); });
+      altlar.forEach(function (x) {
+        x.classList.remove('on');
+        x.removeAttribute('aria-current');
+      });
       b.classList.add('on');
-      if (hedef === 'ust') {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        sec('hepsi');
-        return;
-      }
-      if (hedef === 'alt') {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        return;
-      }
-      sec(hedef);
-      document.getElementById('premium').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      b.setAttribute('aria-current', 'true');
+      git(b.getAttribute('data-git'));
     });
   });
 
@@ -267,15 +278,19 @@ export function reklam({ d, markalar, canonical }) {
     tBar.style.animation = 'none';
     void tBar.offsetWidth;
     tBar.style.animation = 'ilerle 5000ms linear forwards';
-    kutu.style.opacity = '1';
   }
 
-  document.getElementById('toastKapat').addEventListener('click', function (e) {
-    e.preventDefault();
-    e.stopPropagation();
+  function kapat(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     kapali = true;
     clearInterval(sayac);
     kutu.classList.add('gizle');
+  }
+
+  var kapatDugme = document.getElementById('toastKapat');
+  kapatDugme.addEventListener('click', kapat);
+  kapatDugme.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') kapat(e);
   });
 
   yaz();

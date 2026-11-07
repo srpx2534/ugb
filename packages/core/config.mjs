@@ -8,6 +8,8 @@ const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 envYukle({ path: path.join(KOK, '.env') });
 envYukle({ path: path.join(process.cwd(), '.env'), override: true });
 
+const VARSAYILAN_PAROLA = 'PAROLAPAROLA';
+
 const Sema = z.object({
   NODE_ENV: z.enum(['dev', 'test', 'prod']).default('dev'),
   SITE_ID: z.coerce.number().int().min(1).max(999).default(1),
@@ -22,10 +24,11 @@ const Sema = z.object({
   TRUST_PROXY: z.string().default('false').transform((v) => ['1', 'true', 'evet', 'yes'].includes(v.toLowerCase())),
   BOT_ZORLA: z.enum(['0', '1']).default('0'),
   BOT_UA_GECER: z.enum(['0', '1']).default('1'),
+  HASH_TUZU: z.string().min(8).max(190).default('ugb-tuz-degistir'),
   LOG_SEVIYE: z.enum(['info', 'warn', 'error']).default('info'),
   HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
   HUB_HOST: z.string().min(3).default('hedefb.com'),
-  ADMIN_PAROLA: z.string().min(8).default('PAROLAPAROLA'),
+  ADMIN_PAROLA: z.string().min(8).default(VARSAYILAN_PAROLA),
 });
 
 const sonuc = Sema.safeParse(process.env);
@@ -36,9 +39,18 @@ if (!sonuc.success) {
   process.exit(1);
 }
 
+if (sonuc.data.NODE_ENV === 'prod') {
+  if (sonuc.data.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
+    console.warn('uyari: prod ortamda ADMIN_PAROLA varsayilan degerde');
+  }
+  if (/:3002$/.test(sonuc.data.HUB_URL)) {
+    console.warn(`uyari: prod ortamda HUB_URL varsayilan portlu (${sonuc.data.HUB_URL})`);
+  }
+}
+
 export const env = Object.freeze(sonuc.data);
 export const isProd = env.NODE_ENV === 'prod';
-export const VARSAYILAN_PAROLA = 'PAROLAPAROLA';
+export { VARSAYILAN_PAROLA };
 
 const ETIKET = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 const TLD = /^[a-z0-9]{2,}$/;
@@ -54,7 +66,10 @@ export function hostNormalize(host) {
 
 export function ipGecerli(ip) {
   if (typeof ip !== 'string') return false;
-  if (ip.includes(':')) return /^[0-9a-f:]{2,45}$/i.test(ip);
+  if (ip.includes(':')) {
+    if (!/^[0-9a-f:.]{2,45}$/i.test(ip)) return false;
+    return /[0-9a-f]/i.test(ip) && !ip.includes(':::');
+  }
   const p = ip.split('.');
   if (p.length !== 4) return false;
   return p.every((x) => /^\d{1,3}$/.test(x) && Number(x) <= 255);
