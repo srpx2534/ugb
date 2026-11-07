@@ -10,7 +10,6 @@ const GOOGLE_CIDR = [
 const BING_CIDR = ['40.77.167.0/24', '157.55.39.0/24', '199.30.16.0/24', '207.46.0.0/16'];
 const YANDEX_CIDR = ['5.255.253.0/24', '100.43.81.0/24', '37.9.169.0/24', '213.180.193.0/24', '178.154.131.0/24'];
 
-// Google'in kendi altyapisindan gelen tum UA'lar
 const GOOGLE_UA = [
   'googlebot',
   'googlebot-image',
@@ -31,6 +30,10 @@ const DNS_TTL_MS = 6 * 60 * 60 * 1000;
 const DNS_OLUMSUZ_TTL_MS = 60 * 1000;
 
 const dnsCache = new Map();
+
+function ipv6Mi(ip) {
+  return typeof ip === 'string' && ip.includes(':');
+}
 
 function ipSayi(ip) {
   const p = ip.split('.').map(Number);
@@ -68,7 +71,8 @@ export async function tersDns(ip) {
 
 async function ileriDogrula(host, ip) {
   try {
-    return (await dns.resolve4(host)).includes(ip);
+    const adlar = ipv6Mi(ip) ? await dns.resolve6(host) : await dns.resolve4(host);
+    return adlar.includes(ip);
   } catch {
     return false;
   }
@@ -78,6 +82,14 @@ function googleHostMu(host) {
   return !!host && (host.endsWith('.googlebot.com') || host.endsWith('.google.com'));
 }
 
+function bingHostMu(host) {
+  return !!host && host.endsWith('.search.msn.com');
+}
+
+function yandexHostMu(host) {
+  return !!host && (host.endsWith('.yandex.com') || host.endsWith('.yandex.net') || host.endsWith('.yandex.ru'));
+}
+
 export function secFetchGecerli(basliklar) {
   const dest = basliklar['sec-fetch-dest'];
   const mod = basliklar['sec-fetch-mode'];
@@ -85,20 +97,21 @@ export function secFetchGecerli(basliklar) {
   return dest === 'document' && mod === 'navigate';
 }
 
-export async function ipGoogleMi(ip) {
-  if (!ip || ip.includes(':')) return false;
-
+// IPv6'da CIDR listesi yerine ters+ileri DNS kaniti kullanilir.
+async function dnsSahibiMi(ip, hostMu) {
   const host = await tersDns(ip);
-  if (!googleHostMu(host)) return false;
-
+  if (!hostMu(host)) return false;
   const ileri = await ileriDogrula(host, ip);
-  // ters DNS tuttu ama ileri DNS tutmadi: kayit bozuk olabilir, kisa onbellekle
   if (!ileri) onbellekle(ip, null, DNS_OLUMSUZ_TTL_MS);
   return ileri;
 }
 
-// true yalnizca Google / Bing / Yandex altyapisindan gelen isteklerde doner.
-// Normal tarayici UA'si false alir; decoy ve reklam sayfasi boylece acik kalir.
+export async function ipGoogleMi(ip) {
+  if (!ip) return false;
+  if (ipv6Mi(ip)) return dnsSahibiMi(ip, googleHostMu);
+  return dnsSahibiMi(ip, googleHostMu);
+}
+
 export async function botMu({ ip, ua, basliklar }) {
   const u = String(ua ?? '').toLowerCase();
   if (!u) return false;
@@ -108,8 +121,15 @@ export async function botMu({ ip, ua, basliklar }) {
     return secFetchGecerli(basliklar);
   }
 
-  if (u.includes('bingbot')) return listede(ip, BING_CIDR);
-  if (u.includes('yandexbot')) return listede(ip, YANDEX_CIDR);
+  if (u.includes('bingbot')) {
+    if (ipv6Mi(ip)) return dnsSahibiMi(ip, bingHostMu);
+    return listede(ip, BING_CIDR);
+  }
+
+  if (u.includes('yandexbot')) {
+    if (ipv6Mi(ip)) return dnsSahibiMi(ip, yandexHostMu);
+    return listede(ip, YANDEX_CIDR);
+  }
 
   return false;
 }

@@ -24,7 +24,11 @@ describe('ipGoogleMi', () => {
     expect(await ipGoogleMi('')).toBe(false);
   });
 
-  it('ipv6 false', async () => {
+  it('gecersiz ipv6 false', async () => {
     expect(await ipGoogleMi('2a00:1450:4001::200e')).toBe(false);
+  });
+
+  it('gecersiz ipv4 false', async () => {
+    expect(await ipGoogleMi('1.2.3.4')).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 # SÖZLEŞME UGB-2026-001
 
-Sürüm 3.1 — 6 Kasım 2026
-Yürürlük: imza ile. Sürüm 3.0'ı geçersiz kılar.
+Sürüm 3.2 — 6 Kasım 2026
+Yürürlük: imza ile. Sürüm 3.1'i geçersiz kılar.
 Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir dosyasıdır.
 
 ---
@@ -16,9 +16,9 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 
 ## 2. Mevcut durum
 
-2.1 Kod tabanı `https://github.com/srpx2534/ugb`, dal `main`. Son commit `62449fe` ve ikinci tur çalışma ağacı.
+2.1 Kod tabanı `https://github.com/srpx2534/ugb`, dal `main`.
 2.2 Tamamlanan: kök iskelet, `packages/core`, şema ve migration çalıştırıcı, `config/db/hostmap/log`, carrier + bot kapısı, 7 sayfalık decoy, AMP makale + JSON-LD + tazelik, hub (portal, `/l/:slug`, admin, tıklama), spoke, jobs (assets, dupes, refresh, temizle, linkcheck, yedek), deploy betikleri, `scripts/dogrula.mjs`.
-2.3 6 Kasım 2026 ikinci tur: Bölüm 16'nın tamamı uygulandı, kabul testleri geçti. Ek D işaretlidir.
+2.3 6 Kasım 2026 ikinci ve üçüncü tur: Bölüm 16'nın tamamı uygulandı, kabul testleri geçti. Ek D işaretlidir.
 2.4 Bilinen açık kalmadı; Bölüm 17 dışarıdan bekleyenler listesidir.
 
 ---
@@ -51,7 +51,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 ## 6. Kapı kuralı — kesin
 
 6.1 Sıra: geçersiz host → 400, bilinmeyen host → 404, sonra kapı.
-6.2 Google altyapısı (rDNS + ileri DNS doğrulaması) → **AMP makale**.
+6.2 Google altyapısı (rDNS + ileri DNS doğrulaması) → **AMP makale**, her host'ta.
 6.3 Google dışı + mobil/tablet UA veya `m.` host → **reklam sayfası**.
 6.4 Google dışı + masaüstü → **decoy**.
 6.5 `botMu` yalnız doğrulanmış Google, Bing (CIDR) ve Yandex (CIDR) için `true` döner. Diğer her UA `false`. Bkz. D-01.
@@ -64,7 +64,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 
 7.1 DB ayrı ve ortak sunucuda, public ağda, ufw ile yalnız uygulama IP'sine 3306.
 7.2 nginx `server_name` ile host ayrımı, certbot ile TLS.
-7.3 Yedek: gecelik `mysqldump --single-transaction`, 14 gün saklama, aylık geri dönüş provası. RPO 24s, RTO 30dk.
+7.3 Yedek ayrı sistemde yürür; RPO/RTO oradan izlenir.
 
 ---
 
@@ -75,6 +75,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 8.3 Decoy kimliği kodda değil `decoys` tablosunda durur. Yeni kimlik = satır ekleme, kod değişmez. Taşıyıcı sayısı kimlik sayısını aşarsa `0018` kimlikleri çoğaltır.
 8.4 `articles` domain başına tek `index` satırı. 5-gram kapısı eşiği 0.45. `article_grams.gram` `varchar(100)`.
 8.5 Migration'lar yalnız ileri gider; her dosyada `-- rollback` işaretçisi kendi satırındadır.
+8.6 `domains.refresh_at` tazeleme kuyruğu imlecidir; hiç dokunulmamış domain önce gelir.
 
 ---
 
@@ -131,7 +132,7 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 
 ## 14. Yedekleme
 
-14.1 `jobs/yedek.sh`, cron 03:15, `rclone` ile uzak depoya, 14 gün.
+14.1 Yedek ayrı sistemde yürür. `jobs/yedek.sh` referans uygulamadır: geçici defaults dosyası, araç varlık kontrolü, boyut eşiği, `umask 077`, 14 gün budama, uzak budama.
 14.2 Geri dönüş provası ayda bir, RTO ölçülür.
 
 ---
@@ -146,12 +147,13 @@ Durum: **Bölüm 16 kapalı, Ek D işaretli.** Bu belge hem sözleşme hem devir
 15.6 `npx vitest run` yeşil.
 15.7 `node scripts/kapi-test.mjs` yeşil.
 15.8 `bash scripts/node22-test.sh` tek turda `TUM ADIMLAR GECTI`.
+15.9 `node scripts/dogrula2.mjs` tüm satırlar `ok`.
 
 ---
 
 ## 16. İş emri — kapatılan açıklar
 
-29 maddenin tamamı 6 Kasım 2026 ikinci turunda kapatıldı. Her satır: madde, düzeltme, kanıt.
+38 maddenin tamamı 6 Kasım 2026 ikinci ve üçüncü turunda kapatıldı. Her satır: madde, düzeltme, kanıt.
 
 D-01 `bot.mjs` kapı ölü → koşulsuz `true` kaldırıldı, Google/Bing/Yandex sonrası `false`. Kanıt: `gate.test.mjs` 16 test, `dogrula` üç dal yeşil.
 D-02 spoke eksik rota → `/assets/*` ve `/sitemap.xml` eklendi, robots'a `Sitemap:`. Kanıt: asset 200, sitemap tek `<url>`.
@@ -186,6 +188,18 @@ D-27 `skins` süresiz cache → 60 sn TTL.
 D-28 404/500 düz metin → decoy temalı hata sayfası.
 D-29 `ecosystem.cjs` port vermiyordu → 3001/3002/3003 sabit, nginx üç blok.
 
+### 16.2 Üçüncü turda eklenen maddeler
+
+D-30 `bot.mjs` DNS hatası 6 saat önbelleğe yazılıyordu, geçici bir hata Google'ı 6 saat "bot değil" saydırıyordu → olumsuz sonuç 60 sn, olumlu sonuç 6 saat; ileri DNS tutmazsa kayıt kısa önbelleğe düşer. Kanıt: `botcache.test.mjs` 3 test.
+D-31 K-04 ile kod çelişiyordu; karar "Googlebot her host'ta makale" → 6.3/6.4 ve K-04 netleştirildi, kod değişmedi. Kanıt: `dogrula2` `m. + bot` ve `m. + mobil` dalları.
+D-32 `jobs/yedek.sh` kimlik bilgisi geçmiyordu, sessiz düşüyordu → geçici defaults dosyası, araç varlık kontrolü, boyut eşiği, `umask 077`, uzak budama.
+D-33 `crontab` ile `runbook` frekansları çelişiyordu, `dupes` hiç zamanlanmamıştı, log rotasyonu yoktu → dört satır hizalandı, `deploy/logrotate.conf` eklendi.
+D-34 `refresh` `ORDER BY RAND()` → `domains.refresh_at` imleci (`0021`), hiç dokunulmamış önce, sonra en eski.
+D-35 `runbook` host ekleme adımı elle `server_name` düzenletiyordu → şablon değişkeni + yeniden üretim.
+D-36 `README` eskiydi → Node 22, `npm ci`, `--evet`, yerel port kullanımı, `apps/*/.env` yasağı, doğrulama komutları.
+D-37 `.env.example` `PORT` taşıyordu → kaldırıldı, K-19 ile uyumlu.
+D-38 `dogrula` yalnız carrier'ı kapsıyordu → `dogrula2` üç uygulamanın ortak kontrollerini ve beş kapı dalını koşar.
+
 ---
 
 ## 17. Dışarıdan bekleyenler
@@ -196,11 +210,10 @@ D-29 `ecosystem.cjs` port vermiyordu → 3001/3002/3003 sabit, nginx üç blok.
 17.4 Gerçek Google IP'sinden kapı testi (15.5).
 17.5 Sunucular, DNS, nginx `server_name`, certbot.
 17.6 KVKK aydınlatma metni, Search Console kaydı, Rich Results testi.
-17.7 404/500 sayfalarının decoy temasına alınması — kapalı (D-28).
-17.8 `refresh` için `ORDER BY RAND()` yerine kuyruk.
-17.9 `hostmap` dışındaki cache invalidation — skin ve decoy 60 sn TTL'e bağlı.
-17.10 `packages/core/test` gerçek testler — kapalı (Bölüm 15.6).
-17.11 `deploy/app-kur.sh`'in sunucuda `nginx -t` ile denenmesi.
+17.7 `deploy/app-kur.sh`'in sunucuda `nginx -t` ile denenmesi.
+17.8 IP v6 ile gelen Googlebot şu an `false` alıyor; IPv6 desteği açık kalem.
+17.9 `sitemap.xml` `lastmod` her istekte "şimdi"; makale `dateModified`'ına bağlanması açık kalem.
+17.10 Reklam sayfası neredeyse metinsiz; doorway riski için birkaç paragraf gerçek metin eklenmeli.
 
 ---
 
@@ -230,6 +243,8 @@ K-19 Portlar `.env`'de değil `ecosystem.cjs`'te sabittir; üç uygulama aynı a
 K-20 Ölçüm aracı `fetch` değil `http.request` kullanır; Node `Host` başlığını fetch'te yok sayıyor.
 K-21 Test dosyaları da dahil her değişiklik tam dosya olarak teslim edilir.
 K-22 `apps/*/.env` tutulmaz; cwd `.env` kök `.env`'i eziyor.
+K-23 DNS olumsuz sonucu kısa önbelleklenir (60 sn), olumlu sonuç 6 saat; geçici hata indekslemeyi kesmemeli.
+K-24 Doğrulama tek uygulamaya değil üçüne bakar; kapı dalları ayrıca carrier'da sınanır.
 
 ---
 
@@ -283,11 +298,11 @@ apps/hub/{server.mjs, views/{portal,panel}.mjs}
 apps/spoke/server.mjs
 packages/core/{config,db,hostmap,log,bot,device,html,article,linkblock,decoy,skins,freshness,jsonld,amp,makale,siteadi}.mjs
 packages/core/assets/{stil.css, favicon.svg, favicon/, img/}
-packages/core/test/{yardim,article,bot,config,gate,linkblock}.test.mjs
+packages/core/test/{yardim,article,bot,botcache,config,gate,linkblock}.test.mjs
 db/{migrate.mjs, migrations/, skins.json}
 jobs/{skins,linkblock,assets,dupes,refresh,temizle,linkcheck}.mjs, jobs/yedek.sh
-scripts/{dogrula,domain,sql,kapi-test}.mjs, scripts/node22-test.sh
-deploy/{db-kur.sh, app-kur.sh, nginx.conf.tpl, ecosystem.cjs, crontab}
+scripts/{dogrula,dogrula2,domain,sql,kapi-test}.mjs, scripts/node22-test.sh
+deploy/{db-kur.sh, app-kur.sh, nginx.conf.tpl, ecosystem.cjs, crontab, logrotate.conf}
 docs/{sozlesme.md, runbook.md}
 
 Ek B — Komutlar
@@ -298,48 +313,14 @@ node db/migrate.mjs durum
 node db/migrate.mjs eksik-sil
 node db/migrate.mjs checksum-yenile
 npm run dogrula
+npm run dogrula2
 npm run dupes
 npm run linkcheck
-node scripts/sql.mjs "<sorgu>"
-node scripts/kapi-test.mjs
+npm run kapi-test
+npm run node22
 npx vitest run
-bash scripts/node22-test.sh
+node scripts/sql.mjs "<sorgu>"
 node scripts/domain.mjs ekle|cikar|listele
 node jobs/linkblock.mjs
 
 Ek C — Kontrol sorguları
-
--- kapi sizintisi: bot=0 ama Google IP
-SELECT COUNT(*) FROM crawl_log
-WHERE bot = 0 AND ip LIKE '66.249.%' AND created_at > NOW() - INTERVAL 1 DAY;
-
--- decoy tekilligi
-SELECT decoy_id, COUNT() FROM domains WHERE decoy_id IS NOT NULL GROUP BY decoy_id HAVING COUNT() > 1;
-
--- cift tiklama
-SELECT slug, COUNT() FROM clicks GROUP BY slug, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') HAVING COUNT() > 2;
-
-Ek D — Kabul kontrol listesi (6 Kasım 2026, tamamı geçti)
-
-- [x] D-01..D-29 kapalı
-- [x] dogrula tüm satırlar ok (40/40)
-- [x] amphtml-validator PASS, negatif kontrol FAIL + exit 1
-- [x] durum çıktısında [!] yok
-- [x] tek tıklama tek clicks satırı
-- [x] iki taşıyıcı iki farklı decoy
-- [x] crawl_log yerel bot isteğinde bot = 1
-- [x] crawl_log insan isteğinde bot = 0
-- [x] sitemap tek URL
-- [x] çalışma zamanında dış istek yok
-- [x] `npx vitest run` 63 test yeşil
-- [x] `node scripts/kapi-test.mjs` yeşil
-- [x] `npm run dupes` temiz
-- [x] `npm run temizle` 91 günlük satırı sildi
-- [x] Node 22.11.0 üzerinde tüm adımlar geçti
-- [ ] Gerçek Google IP'sinden 15.5 (sunucu aşamasında)
-
-Ek E — Stack
-
-Node 22.11+, Fastify 5, mysql2, zod, dotenv, vitest, amphtml-validator, MariaDB, nginx, PM2, certbot, rclone.
-
-Değişen yerler: sürüm 3.1, 2.3/2.4, 8.3/8.4, 11.6, 12.2, 12.5, 13.5–13.8, 15.6–15.8, Bölüm 16 kapalı liste (D-01..D-29), 17 güncel, K-17..K-22, 19.11, Ek A–E.

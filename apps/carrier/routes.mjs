@@ -52,6 +52,15 @@ async function markalar() {
   return q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
 }
 
+// sitemap lastmod: makalenin son degisim gunu, yoksa bugun (Istanbul)
+async function sonDegisim(domainId) {
+  const satir = await one(
+    "SELECT DATE_FORMAT(lastmod, '%Y-%m-%d') AS gun FROM articles WHERE domain_id = ? AND slug = 'index'",
+    [domainId]
+  );
+  return satir?.gun ?? istanbulIso(new Date()).slice(0, 10);
+}
+
 async function makale(istek, yanit) {
   const domain = istek.domain;
   const siteId = domain.site_id ?? domain.es_site_id ?? null;
@@ -85,6 +94,7 @@ async function makale(istek, yanit) {
   yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
   yanit.header('pragma', 'no-cache');
   yanit.header('expires', '0');
+  yanit.header('last-modified', new Date(modified.iso).toUTCString());
   yanit.type('text/html; charset=utf-8');
   return ampSayfa({
     d: { ana, ad, rozet: 'Güncel' },
@@ -197,9 +207,10 @@ export async function kayitlar(app) {
   });
 
   app.get('/sitemap.xml', async (istek, yanit) => {
+    const kok = `https://${istek.hostname.replace(/^m\./, '')}`;
     yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
     yanit.type('application/xml; charset=utf-8');
-    return sitemap(['/'], `https://${istek.hostname.replace(/^m\./, '')}`, istanbulIso(new Date()));
+    return sitemap(['/'], kok, await sonDegisim(istek.domain.id));
   });
 
   app.setNotFoundHandler(async (istek, yanit) => bulunamadi(istek, yanit));

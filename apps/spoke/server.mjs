@@ -45,6 +45,14 @@ function ipHash(ip) {
   return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
 }
 
+async function sonDegisim(domainId) {
+  const satir = await one(
+    "SELECT DATE_FORMAT(lastmod, '%Y-%m-%d') AS gun FROM articles WHERE domain_id = ? AND slug = 'index'",
+    [domainId]
+  );
+  return satir?.gun ?? istanbulIso(new Date()).slice(0, 10);
+}
+
 app.addHook('onRequest', async (istek, yanit) => {
   if (!hostGecerli(istek.hostname)) {
     yanit.code(400).send('gecersiz host');
@@ -104,6 +112,7 @@ app.get('/', async (istek, yanit) => {
   });
 
   yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+  yanit.header('last-modified', new Date(modified.iso).toUTCString());
   yanit.type('text/html; charset=utf-8');
   return ampSayfa({
     d: { ana, ad, rozet: 'Güncel' },
@@ -147,7 +156,7 @@ app.get('/robots.txt', async (istek, yanit) => {
 app.get('/sitemap.xml', async (istek, yanit) => {
   yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
   yanit.type('application/xml; charset=utf-8');
-  return sitemap(['/'], `https://${istek.hostname}`, istanbulIso(new Date()));
+  return sitemap(['/'], `https://${istek.hostname}`, await sonDegisim(istek.domain.id));
 });
 
 app.setErrorHandler((h, istek, yanit) => {

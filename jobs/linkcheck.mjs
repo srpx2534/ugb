@@ -2,8 +2,9 @@
 // Basarili hedef dogrulanmis sayilir. Dogrulanmis hedef sonradan duserse pasife alinir.
 // Hic dogrulanmamis hedef pasife alinmaz, yer tutucu olarak listede kalir.
 // elle_kapali = 1 ise aktif alani linkcheck tarafindan degistirilmez.
+// Kilit: coklu app sunucusunda cift calismayi engeller.
 
-import { q, close } from '../packages/core/db.mjs';
+import { q, withLock, close } from '../packages/core/db.mjs';
 import { log } from '../packages/core/log.mjs';
 
 const ZAMAN_ASIMI = 12000;
@@ -32,33 +33,35 @@ async function dene(url) {
 }
 
 try {
-  const markalar = await q('SELECT id, ad, url, dogrulandi, elle_kapali FROM brands WHERE url IS NOT NULL');
+  await withLock('linkcheck', 900, async () => {
+    const markalar = await q('SELECT id, ad, url, dogrulandi, elle_kapali FROM brands WHERE url IS NOT NULL');
 
-  let olu = 0;
-  for (const m of markalar) {
-    const durum = await dene(m.url);
+    let olu = 0;
+    for (const m of markalar) {
+      const durum = await dene(m.url);
 
-    if (durum === 0) {
-      if (m.dogrulandi && !m.elle_kapali) {
-        await q('UPDATE brands SET aktif = 0, son_kontrol = NOW() WHERE id = ?', [m.id]);
-        olu++;
-        log.warn('dogrulanmis hedef dustu', { ad: m.ad, url: m.url });
+      if (durum === 0) {
+        if (m.dogrulandi && !m.elle_kapali) {
+          await q('UPDATE brands SET aktif = 0, son_kontrol = NOW() WHERE id = ?', [m.id]);
+          olu++;
+          log.warn('dogrulanmis hedef dustu', { ad: m.ad, url: m.url });
+        } else {
+          await q('UPDATE brands SET son_kontrol = NOW() WHERE id = ?', [m.id]);
+          log.warn('hedef dogrulanamadi (pasif tutulmadi)', { ad: m.ad, url: m.url, elle_kapali: !!m.elle_kapali });
+        }
       } else {
-        await q('UPDATE brands SET son_kontrol = NOW() WHERE id = ?', [m.id]);
-        log.warn('hedef dogrulanamadi (pasif tutulmadi)', { ad: m.ad, url: m.url, elle_kapali: !!m.elle_kapali });
+        await q(
+          'UPDATE brands SET dogrulandi = 1, son_kontrol = NOW(), aktif = IF(elle_kapali = 1, 0, 1) WHERE id = ?',
+          [m.id]
+        );
+        log.info('hedef saglam', { ad: m.ad, durum });
       }
-    } else {
-      await q(
-        'UPDATE brands SET dogrulandi = 1, son_kontrol = NOW(), aktif = IF(elle_kapali = 1, 0, 1) WHERE id = ?',
-        [m.id]
-      );
-      log.info('hedef saglam', { ad: m.ad, durum });
+
+      await new Promise((r) => setTimeout(r, 700));
     }
 
-    await new Promise((r) => setTimeout(r, 700));
-  }
-
-  log.info('bitti', { kontrol: markalar.length, dusen: olu });
+    log.info('bitti', { kontrol: markalar.length, dusen: olu });
+  });
 } catch (e) {
   log.error('linkcheck hatasi', { hata: e.message });
   process.exitCode = 1;

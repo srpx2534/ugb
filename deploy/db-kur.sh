@@ -4,17 +4,19 @@ set -euo pipefail
 : "${DB_NAME:=ugb}"
 : "${DB_USER:=ugb_app}"
 : "${DB_PASS:?DB_PASS gerekli (en az 16 karakter)}"
-: "${APP_IP:?APP_IP gerekli}"
+: "${APP_IPLER:?APP_IPLER gerekli (boslukla ayrilmis uygulama IP leri)}"
 
 apt update
 apt install -y mariadb-server fail2ban ufw
 
 ufw default deny incoming
 ufw allow 22/tcp
-ufw allow from "$APP_IP" to any port 3306 proto tcp
+for ip in $APP_IPLER; do
+  ufw allow from "$ip" to any port 3306 proto tcp
+done
 ufw --force enable
 
-cat >/etc/mysql/mariadb.conf.d/99-ugb.cnf <<CFG
+cat >/etc/mysql/mariadb.conf.d/99-ugb.cnf <<'CFG'
 [mysqld]
 bind-address = 0.0.0.0
 skip-name-resolve
@@ -30,13 +32,15 @@ CFG
 install -d -o mysql -g adm -m 750 /var/log/mysql
 systemctl restart mariadb
 
-mysql -u root <<SQL
-CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '$DB_USER'@'$APP_IP' IDENTIFIED BY '$DB_PASS';
-ALTER USER '$DB_USER'@'$APP_IP' WITH MAX_USER_CONNECTIONS 40;
-GRANT ALL ON \`$DB_NAME\`.* TO '$DB_USER'@'$APP_IP';
-FLUSH PRIVILEGES;
-SQL
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+for ip in $APP_IPLER; do
+  mysql -u root -e "CREATE USER IF NOT EXISTS '$DB_USER'@'$ip' IDENTIFIED BY '$DB_PASS';"
+  mysql -u root -e "ALTER USER '$DB_USER'@'$ip' WITH MAX_USER_CONNECTIONS 40;"
+  mysql -u root -e "GRANT ALL ON \`$DB_NAME\`.* TO '$DB_USER'@'$ip';"
+done
+
+mysql -u root -e "FLUSH PRIVILEGES;"
 
 cat >/etc/fail2ban/jail.d/mariadb.local <<'JAIL'
 [mariadb-auth]
@@ -49,4 +53,4 @@ bantime  = 3600
 JAIL
 
 systemctl restart fail2ban
-echo "db hazir. migration'i uygulama sunucusundan calistir."
+echo "db hazir. migration'i is sunucusundan calistir."

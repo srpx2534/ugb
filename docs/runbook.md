@@ -46,6 +46,7 @@ AMP Cache 1 Temmuz 2026'da kapatıldı. AMP yalnız hız için tutuluyor, sıral
 
 ## Bakım
 
+Cron yalnız tek iş sunucusunda kurulur; ikinci app sunucusuna kurulmaz. `refresh`, `temizle`, `linkcheck`, `dupes` DB kilidi taşıdığı için yanlışlıkla çift çalışsa da ikinci tur beklemede kalır.
 - `refresh` saatlik tetiklenir, her turda sıradaki 4 domain; bir domain ortalama 12 saatte bir yenilenir.
 - `linkcheck` günde bir; `elle_kapali = 1` olan markanın `aktif` alanına dokunmaz.
 - `temizle` haftada bir, `crawl_log` 90 / `clicks` 180 gün.

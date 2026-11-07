@@ -188,7 +188,7 @@ app.get('/robots.txt', async (istek, yanit) => {
 app.get('/sitemap.xml', async (istek, yanit) => {
   yanit.header('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
   yanit.type('application/xml; charset=utf-8');
-  return sitemap(['/'], `https://${istek.hostname}`, istanbulIso(new Date()));
+  return sitemap(['/'], `https://${istek.hostname}`, istanbulIso(new Date()).slice(0, 10));
 });
 
 app.setErrorHandler((hata, istek, yanit) => {

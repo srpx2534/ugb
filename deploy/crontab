@@ -2,6 +2,7 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 MAILTO=""
 
+# YALNIZ is sunucusunda kurulur. Birden fazla app sunucusu varsa digerlerine kurulmaz.
 # 12 saatlik tazeleme: saatlik tetiklenir, her turda siradaki 4 domain
 17 * * * * cd /srv/ugb && /usr/bin/node jobs/refresh.mjs >> /var/log/ugb-refresh.log 2>&1
 # haftalik budama
