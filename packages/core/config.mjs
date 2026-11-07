@@ -16,6 +16,8 @@ for (const [k, v] of Object.entries(SISTEM_ENV)) process.env[k] = v;
 const VARSAYILAN_PAROLA = 'PAROLAPAROLA';
 const VARSAYILAN_TUZ = 'ugb-tuz-degistir';
 
+
+
 const Sema = z.object({
   NODE_ENV: z.enum(['dev', 'test', 'prod']).default('dev'),
   SITE_ID: z.coerce.number().int().min(1).max(999).default(1),
@@ -36,6 +38,7 @@ const Sema = z.object({
   HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
   HUB_HOST: z.string().min(3).default('hedefb.com'),
   ADMIN_PAROLA: z.string().min(8).default(VARSAYILAN_PAROLA),
+  DIKEY: z.enum(['bonus', 'canli-mac']).default('bonus'),
 });
 
 const sonuc = Sema.safeParse(process.env);

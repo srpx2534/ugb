@@ -19,6 +19,7 @@
     "./freshness": "./freshness.mjs",
     "./jsonld": "./jsonld.mjs",
     "./amp": "./amp.mjs",
-    "./makale": "./makale.mjs"
+    "./makale": "./makale.mjs",
+    "./dikey": "./dikey.mjs"
   }
 }

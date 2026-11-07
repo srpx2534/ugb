@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env, slugGecerli, kokUrlHost } from '@ugb/core/config';
+import { dikey } from '@ugb/core/dikey';
 import { sitemap } from '@ugb/core/html';
 import { decoyCoz } from '@ugb/core/decoy';
 import { skinCoz } from '@ugb/core/skins';
@@ -100,7 +101,7 @@ function tikSayilirMi(anahtar) {
 }
 
 async function markalar() {
-  return q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
+  return q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 AND dikey = ? ORDER BY id', [dikey.ad]);
 }
 
 // sitemap lastmod: makalenin son degisimi, yoksa domain olusturulma gunu, yoksa sabit taban

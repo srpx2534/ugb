@@ -1,4 +1,5 @@
 import { kacis } from '@ugb/core/html';
+import { dikey } from '@ugb/core/dikey';
 
 const VARSAYILAN_ANA = '#F59E0B';
 
@@ -87,34 +88,35 @@ export function reklam({ d, markalar, canonical }) {
   const en = liste[0];
   const premium = liste.slice(0, 4);
   const trendAdet = Math.max(0, liste.length - premium.length);
+  const teklif = (m) => m.teklif ?? dikey.varsayilanTeklif;
 
   const bannerlar = premium
     .map(
       (m) =>
-        `<a class="banner" href="/l/${kacis(m.slug)}"><b>${kacis(m.ad)}</b><span>${kacis(m.teklif ?? 'Deneme bonusu')}</span><i>Bonusu Al</i></a>`
+        `<a class="banner" href="/l/${kacis(m.slug)}"><b>${kacis(m.ad)}</b><span>${kacis(teklif(m))}</span><i>${kacis(dikey.cta)}</i></a>`
     )
     .join('');
 
   const kartlar = liste
     .map((m, i) => {
       const grup = i < premium.length ? 'premium' : 'trend';
-      return `<a class="kart" data-g="${grup}" data-a="${kacis(`${m.ad} ${m.teklif ?? ''}`.toLowerCase())}" href="/l/${kacis(m.slug)}"><span class="kut">${kacis(m.ad)}</span><b>${kacis(m.teklif ?? 'Deneme bonusu')}</b><small>${kacis(m.ad)}</small><span class="btn">Bonusu Al</span></a>`;
+      return `<a class="kart" data-g="${grup}" data-a="${kacis(`${m.ad} ${teklif(m)}`.toLowerCase())}" href="/l/${kacis(m.slug)}"><span class="kut">${kacis(m.ad)}</span><b>${kacis(teklif(m))}</b><small>${kacis(m.ad)}</small><span class="btn">${kacis(dikey.cta)}</span></a>`;
     })
     .join('');
 
-  const havuz = liste.map((m) => ({ a: m.ad, t: m.teklif ?? 'Deneme bonusu', s: m.slug }));
+  const havuz = liste.map((m) => ({ a: m.ad, t: teklif(m), s: m.slug }));
 
   const ustBar = en
-    ? `<a href="/l/${kacis(en.slug)}"><span class="ikn">★</span><span class="ad">${kacis(en.ad)} — ${kacis(en.teklif ?? 'Deneme bonusu')}</span><span class="cta">Bonusu Al ›</span></a>`
-    : `<a href="/"><span class="ikn">★</span><span class="ad">Güncel bonus listesi</span><span class="cta">Aç ›</span></a>`;
+    ? `<a href="/l/${kacis(en.slug)}"><span class="ikn">★</span><span class="ad">${kacis(en.ad)} — ${kacis(teklif(en))}</span><span class="cta">${kacis(dikey.ctaUst)}</span></a>`
+    : `<a href="/"><span class="ikn">★</span><span class="ad">${kacis(dikey.ustYedek)}</span><span class="cta">${kacis(dikey.ustYedekCta)}</span></a>`;
 
   return `<!doctype html>
 <html lang="tr" style="--ana:${kacis(ana)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Deneme Bonusu Veren Siteler 2026 — Güncel Liste</title>
-<meta name="description" content="2026 güncel deneme bonusu listesi. Yatırımsız ve çevrimsiz kampanyalar; çevrim şartı, çekim limiti ve doğrulama adımlarıyla birlikte.">
+<title>${kacis(dikey.baslik)}</title>
+<meta name="description" content="${kacis(dikey.aciklama)}">
 <meta name="robots" content="index, follow, noarchive">
 <meta name="theme-color" content="${kacis(ana)}">
 <link rel="canonical" href="${kacis(canonical)}">
@@ -127,51 +129,46 @@ export function reklam({ d, markalar, canonical }) {
 <main class="ic">
   <div class="ara">
     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg>
-    <input id="ara" type="search" inputmode="search" placeholder="Site veya bonus ara…" aria-label="Site veya bonus ara">
-    <span class="sayi"><b id="sayi">${liste.length}</b> site</span>
+    <input id="ara" type="search" inputmode="search" placeholder="${kacis(dikey.ara)}" aria-label="${kacis(dikey.araEtiket)}">
+    <span class="sayi"><b id="sayi">${liste.length}</b> ${kacis(dikey.sayacEtiket)}</span>
   </div>
 
   <div class="cipler" role="group" aria-label="Liste filtresi" id="cipler">
     <button class="cip" data-m="hepsi" aria-pressed="true" type="button">Tümü <b>${liste.length}</b></button>
-    <button class="cip" data-m="trend" aria-pressed="false" type="button">Trend Siteler <b>${trendAdet}</b></button>
-    <button class="cip" data-m="premium" aria-pressed="false" type="button">Premium Siteler <b>${premium.length}</b></button>
+    <button class="cip" data-m="trend" aria-pressed="false" type="button">${kacis(dikey.trendBaslik)} <b>${trendAdet}</b></button>
+    <button class="cip" data-m="premium" aria-pressed="false" type="button">${kacis(dikey.premiumBaslik)} <b>${premium.length}</b></button>
   </div>
 
   <section id="premium">
-    <h2><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2 9 9l-7 .6 5.3 4.7L5.6 22 12 18.3 18.4 22l-1.7-7.7L22 9.6 15 9z"/></svg>Premium Siteler</h2>
+    <h2><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2 9 9l-7 .6 5.3 4.7L5.6 22 12 18.3 18.4 22l-1.7-7.7L22 9.6 15 9z"/></svg>${kacis(dikey.premiumBaslik)}</h2>
     ${bannerlar}
   </section>
 
   <section>
-    <h2><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Trend Siteler<span>${liste.length} site</span></h2>
+    <h2><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>${kacis(dikey.trendBaslik)}<span>${liste.length} ${kacis(dikey.sayacEtiket)}</span></h2>
     <div class="grid" id="grid">${kartlar}</div>
-    <div class="bos gizle" id="bos">Aramanla eşleşen site yok. Filtreyi “Tümü” yap veya adı kısalt.</div>
+    <div class="bos gizle" id="bos">${kacis(dikey.bos)}</div>
   </section>
 
-  <p class="metin">Liste, 2026 itibarıyla aktif kampanya yayınlayan sitelerden oluşuyor. Sıralama; bonus tutarı, çevrim şartı, çekim limiti ve doğrulama süresi birlikte değerlendirilerek yapılır. Üstteki premium alan, kampanyası güncel ve şartları görece hafif olan sitelere ayrılır.</p>
-
-  <p class="metin">Her satırdaki “Bonusu Al” butonu ilgili sitenin kampanya sayfasına gider. Açılan sayfada bonusun geçerlilik tarihi, çevrim katı ve çekim üst limiti yazılıdır; üyelik öncesi bu üç maddeyi oku. Kampanyalar siteler tarafından haber verilmeden kaldırılabilir, bu yüzden tutar sütununu tarihle birlikte değerlendir.</p>
+  ${dikey.paragraflar.map((p) => `<p class="metin">${kacis(p)}</p>`).join('\n\n  ')}
 
   <div class="dikkat">
     <ul>
-      <li>Deneme bonusu genelde tek hesap içindir; aynı kimlikle ikinci hesap açmak bonusu düşürür.</li>
-      <li>Çevrim tamamlanmadan yapılan çekim talebi bonusu ve bonusla gelen kazancı silebilir.</li>
-      <li>Çekim öncesi kimlik ve adres doğrulaması istenebilir; bunu baştan bilerek ilerle.</li>
-      <li>Havale ve kripto yatırımlarında alt sınır siteye göre değişir, tutar sütunundaki notu oku.</li>
+      ${dikey.uyarilar.map((u) => `<li>${kacis(u)}</li>`).join('\n      ')}
     </ul>
   </div>
 
   <footer>
-    ${kacis(d?.ad ?? 'Deneme Bonusu')} · Güncelleme: ${kacis(d?.tarih ?? '')}<br>
-    Bu sayfa bilgilendirme amaçlıdır, bahis sitesi değildir. Bonus şartları ilgili sitenin sorumluluğundadır. 18 yaş sınırı vardır.
+    ${kacis(d?.ad ?? 'Güncel Liste')} · Güncelleme: ${kacis(d?.tarih ?? '')}<br>
+    ${kacis(dikey.footer)}
   </footer>
 </main>
 
 <nav class="alt">
   <button type="button" class="on" data-git="hepsi" aria-current="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Anasayfa</button>
-  <button type="button" data-git="premium"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg>Oyun Seçici</button>
-  <button type="button" class="orta" data-git="ust"><span class="top"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2 1.4 5.9L19 12l-5.6 2.1L12 20l-1.4-5.9L5 12l5.6-2.1z"/></svg></span><span class="lbl">Çark</span></button>
-  <button type="button" data-git="trend"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 6h18v5a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/></svg>Çekilişler</button>
+  <button type="button" data-git="premium"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg>Seçici</button>
+  <button type="button" class="orta" data-git="ust"><span class="top"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2 1.4 5.9L19 12l-5.6 2.1L12 20l-1.4-5.9L5 12l5.6-2.1z"/></svg></span><span class="lbl">${kacis(dikey.ortaEtiket)}</span></button>
+  <button type="button" data-git="trend"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 6h18v5a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/></svg>Liste</button>
   <button type="button" data-git="alt"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M4 4h16v12H8l-4 4z"/></svg>İletişim</button>
 </nav>
 
@@ -180,7 +177,7 @@ export function reklam({ d, markalar, canonical }) {
     <span class="ikn">★</span>
     <span class="gov">
       <span class="ust"><b id="tKim">ze****79</b> • <span id="tAd">—</span></span>
-      <span class="alt" id="tTutar">— <i>kazandı</i></span>
+      <span class="alt" id="tTutar">— <i>${kacis(dikey.toastEtiket)}</i></span>
     </span>
     <span class="bar"><span id="tBar"></span></span>
     <span class="kapat" id="toastKapat" role="button" tabindex="0" aria-label="Kapat">✕</span>
@@ -190,6 +187,8 @@ export function reklam({ d, markalar, canonical }) {
 <script>
 (function () {
   var havuz = ${jsonGuvenli(havuz)};
+  var tip = ${jsonGuvenli(dikey.toastTip)};
+  var etiket = ${jsonGuvenli(dikey.toastEtiket)};
   var ara = document.getElementById('ara');
   var sayi = document.getElementById('sayi');
   var cipler = [].slice.call(document.querySelectorAll('.cip'));
@@ -270,10 +269,15 @@ export function reklam({ d, markalar, canonical }) {
   function yaz() {
     if (kapali) return;
     var m = havuz[Math.floor(Math.random() * havuz.length)];
-    var tutar = (Math.floor(Math.random() * 900) + 120) * 1000;
     tKim.textContent = kimler[Math.floor(Math.random() * kimler.length)];
     tAd.textContent = m.t;
-    tTutar.innerHTML = tutar.toLocaleString('tr-TR') + ' ₺ <i>kazandı</i>';
+    if (tip === 'para') {
+      var tutar = (Math.floor(Math.random() * 900) + 120) * 1000;
+      tTutar.innerHTML = tutar.toLocaleString('tr-TR') + ' ₺ <i>' + etiket + '</i>';
+    } else {
+      var adet = Math.floor(Math.random() * 3200) + 800;
+      tTutar.innerHTML = adet.toLocaleString('tr-TR') + ' <i>' + etiket + '</i>';
+    }
     link.setAttribute('href', '/l/' + m.s);
     tBar.style.animation = 'none';
     void tBar.offsetWidth;

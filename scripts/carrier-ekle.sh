@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Yeni tasiyici ekler: masaustu host + m. host + iki ayri decoy + dogrulama.
+# Kullanim: bash scripts/carrier-ekle.sh <host> <kume_id>
+# Ornek   : bash scripts/carrier-ekle.sh ornek.com 1
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+HOST="${1:-}"
+KUME="${2:-}"
+
+if [ -z "$HOST" ] || [ -z "$KUME" ]; then
+  echo "kullanim: bash scripts/carrier-ekle.sh <host> <kume_id>" >&2
+  exit 1
+fi
+
+HOST="$(printf '%s' "$HOST" | tr 'A-Z' 'a-z')"
+MOBIL_HOST="m.${HOST}"
+
+case "$HOST" in
+  *.*) ;;
+  *) echo "HATA: host en az bir nokta icermeli" >&2; exit 1 ;;
+esac
+
+echo "== on kontrol =="
+DOLU="$(npm run --silent sql "SELECT COUNT(*) AS n FROM domains WHERE kume_id = ${KUME} AND role = 'carrier'")"
+echo "kume ${KUME} tasiyici sayisi: ${DOLU}"
+echo "(kume basina ust sinir 21)"
+
+VAR="$(npm run --silent sql "SELECT COUNT(*) AS n FROM domains WHERE host IN ('${HOST}', '${MOBIL_HOST}')")"
+if [ "$VAR" != "0" ]; then
+  echo "HATA: ${HOST} veya ${MOBIL_HOST} zaten kayitli" >&2
+  exit 1
+fi
+
+BOS_DECOY="$(npm run --silent sql "SELECT COUNT(*) AS n FROM decoys d WHERE NOT EXISTS (SELECT 1 FROM domains x WHERE x.decoy_id = d.id)")"
+if [ "${BOS_DECOY:-0}" -lt 2 ]; then
+  echo "HATA: en az 2 bos decoy gerekiyor, mevcut ${BOS_DECOY:-0}" >&2
+  exit 1
+fi
+
+echo "== ekleme =="
+node scripts/domain.mjs ekle "$HOST" carrier "$KUME" 0
+node scripts/domain.mjs ekle "$MOBIL_HOST" carrier "$KUME" 1
+
+echo "== decoy baglama =="
+for H in "$HOST" "$MOBIL_HOST"; do
+  D="$(npm run --silent sql "SELECT d.id AS n FROM decoys d WHERE NOT EXISTS (SELECT 1 FROM domains x WHERE x.decoy_id = d.id) ORDER BY d.id LIMIT 1")"
+  npm run --silent sql "UPDATE domains SET decoy_id = ${D} WHERE host = '${H}'"
+  echo "  ${H} -> decoy ${D}"
+done
+
+echo "== dogrulama =="
+npm run --silent sql "SELECT id, host, role, kume_id, site_id, decoy_id, mobil, aktif FROM domains WHERE host IN ('${HOST}', '${MOBIL_HOST}')"
+
+echo
+echo "eklendi. hostmap onbellegi 60 sn icinde tazelenir; hemen test icin servisi yeniden baslat."
+echo "sonraki adim:"
+echo "  BASE=http://127.0.0.1:3001 HOST=${MOBIL_HOST} npm run bot-test"
