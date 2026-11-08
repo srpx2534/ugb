@@ -1,7 +1,8 @@
 // packages/core/config.mjs
 //
-// Tum ayarlar ortam degiskenlerinden okunur. Dosyada tek bir sir degeri yoktur:
-// ADMIN_PAROLA ve HASH_TUZU her ortamda zorunludur, bos birakilirsa modul acilmaz.
+// Tum ayarlar ortam degiskenlerinden okunur. Dosyada tek bir sir degeri yoktur.
+// ADMIN_PAROLA (min 12) ve HASH_TUZU (min 16) her ortamda zorunludur;
+// bos birakilirsa sema hatasi verip cikilir.
 //
 // Oncelik: sistem ortami > cwd/.env > kok/.env.local > kok/.env
 // Sistem ortami (pm2/systemd) hicbir dosya tarafindan ezilmez.
@@ -101,37 +102,8 @@ const URETIM_MI = ORTAM === 'prod';
 const TEST_MI = ORTAM === 'test';
 
 // ---------------------------------------------------------------------------
-// Sirlar: her ortamda zorunlu, varsayilan yok
-// ---------------------------------------------------------------------------
-
-// Ornek dosyadan kopyalanip degistirilmeden birakilan degerleri yakalar.
-const ORNEK_DEGERLER = new Set(['PAROLAPAROLA', 'ugb-tuz-degistir']);
-
-const sir = (ad, minUzunluk) => {
-  const deger = hamDeger(ad);
-
-  if (deger === '') {
-    throw new Error(
-      `${HATA_ON_EKI} ${ad} tanimli degil. Sabit varsayilan yok, .env doldurulmali.`
-    );
-  }
-
-  if (deger.length < minUzunluk) {
-    throw new Error(`${HATA_ON_EKI} ${ad} en az ${minUzunluk} karakter olmali.`);
-  }
-
-  if (ORNEK_DEGERLER.has(deger) || deger.includes('degistir')) {
-    console.warn(`${HATA_ON_EKI} ${ad} hala ornek degerde: degistirilmeli.`);
-  }
-
-  return deger;
-};
-
-const VARSAYILAN_PAROLA = sir('ADMIN_PAROLA', 12);
-const VARSAYILAN_TUZ = sir('HASH_TUZU', 16);
-
-// ---------------------------------------------------------------------------
 // Sema
+// Sirlar burada zorunlu: .default() yok, bos deger sema hatasi uretir.
 // ---------------------------------------------------------------------------
 
 const bayrak = (varsayilan) => z.enum(['0', '1']).default(varsayilan);
@@ -181,9 +153,18 @@ if (!sonuc.success) {
 
 const env = Object.freeze(sonuc.data);
 
+// Geriye uyum: bu iki isim artik deger tutmuyor, env'den turetiliyor.
+// Tuketiciler dogrudan env.ADMIN_PAROLA / env.HASH_TUZU de kullanabilir.
+export const VARSAYILAN_PAROLA = env.ADMIN_PAROLA;
+export const VARSAYILAN_TUZ = env.HASH_TUZU;
+
 // ---------------------------------------------------------------------------
 // Uretim uyarilari
 // ---------------------------------------------------------------------------
+
+if (env.HASH_TUZU.includes('degistir')) {
+  console.warn(`${HATA_ON_EKI} HASH_TUZU hala ornek degerde: degistirilmeli.`);
+}
 
 if (URETIM_MI) {
   if (/:3002$/.test(env.HUB_URL)) {
@@ -339,7 +320,7 @@ export function slugGecerli(slug) {
 // Disa aktarim
 // ---------------------------------------------------------------------------
 
-export { env, VARSAYILAN_PAROLA, VARSAYILAN_TUZ };
+export { env };
 export const isProd = URETIM_MI;
 export const AYAR = env;
 export default env;
