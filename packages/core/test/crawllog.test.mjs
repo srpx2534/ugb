@@ -136,7 +136,7 @@ describe('toplu yazim', () => {
 });
 
 describe('hata davranisi', () => {
-  it('mesgul hatasinda parti geri kuyruga konur, sonra yazilir', async () => {
+  it('mesgul hatasinda parti geri kuyruga konur', async () => {
     sahteEnv.CRAWL_LOG_TOPLU = 2;
 
     sahteQ.mockRejectedValueOnce(mesgulHata()).mockResolvedValueOnce({ affectedRows: 2 });
@@ -144,12 +144,19 @@ describe('hata davranisi', () => {
     mod.crawlLogEkle(kayit({ ip: '10.0.0.1' }));
     mod.crawlLogEkle(kayit({ ip: '10.0.0.2' }));
 
+    await vi.waitFor(() => expect(mod.crawlLogDurum().hata).toBe(1));
+
+    // mesgulde hemen tekrar denenmez, parti kaybolmadan kuyrukta bekler
+    const d = mod.crawlLogDurum();
+    expect(d.kuyruk).toBe(2);
+    expect(d.atilan).toBe(0);
+    expect(sahteQ).toHaveBeenCalledTimes(1);
+
+    // sonraki kayit esigi tetikler ve parti yazilir
+    mod.crawlLogEkle(kayit({ ip: '10.0.0.3' }));
     await vi.waitFor(() => expect(mod.crawlLogDurum().yazilan).toBe(2));
 
-    const d = mod.crawlLogDurum();
-    expect(d.hata).toBe(1);
-    expect(d.atilan).toBe(0);
-    expect(d.kuyruk).toBe(0);
+    expect(mod.crawlLogDurum().kuyruk).toBe(1);
     expect(sahteQ).toHaveBeenCalledTimes(2);
   });
 
@@ -167,18 +174,40 @@ describe('hata davranisi', () => {
     expect(d.atilan).toBe(2);
     expect(d.kuyruk).toBe(0);
     expect(d.sonHata).toContain('bilinmeyen sutun');
+    expect(sahteQ).toHaveBeenCalledTimes(1);
   });
 
   it('mesgul hatasi kuyrugu tavanin ustune cikarirsa parti atilir', async () => {
     sahteEnv.CRAWL_LOG_TOPLU = 2;
     sahteEnv.CRAWL_LOG_KUYRUK = 2;
+    sahteQ.mockRejectedValue(mesgulHata());
 
+    // ilk iki kayit bosaltmayi baslatir, kuyruk bosalir
+    mod.crawlLogEkle(kayit({ ip: '10.0.0.1' }));
+    mod.crawlLogEkle(kayit({ ip: '10.0.0.2' }));
+
+    // reddetme gelmeden kuyruk yeniden dolar
+    mod.crawlLogEkle(kayit({ ip: '10.0.0.3' }));
+    mod.crawlLogEkle(kayit({ ip: '10.0.0.4' }));
+
+    await vi.waitFor(() => expect(mod.crawlLogDurum().atilan).toBe(2));
+
+    expect(mod.crawlLogDurum().kuyruk).toBe(2);
+    expect(sahteQ).toHaveBeenCalledTimes(1);
+  });
+
+  it('mesgulde sonsuz dongu kurmaz', async () => {
+    sahteEnv.CRAWL_LOG_TOPLU = 1;
+    sahteEnv.CRAWL_LOG_KUYRUK = 1;
     sahteQ.mockRejectedValue(mesgulHata());
 
     mod.crawlLogEkle(kayit());
-    mod.crawlLogEkle(kayit());
 
-    await vi.waitFor(() => expect(mod.crawlLogDurum().atilan).toBeGreaterThan(0));
-    expect(mod.crawlLogDurum().atilan).toBe(2);
+    await vi.waitFor(() => expect(mod.crawlLogDurum().hata).toBe(1));
+    await new Promise((r) => setTimeout(r, 20));
+
+    // tek deneme yapildi, dongu surmedı
+    expect(sahteQ).toHaveBeenCalledTimes(1);
+    expect(mod.crawlLogDurum().kuyruk).toBe(1);
   });
 });

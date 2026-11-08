@@ -39,6 +39,8 @@ function bosalt() {
     degerler.push(k.domain_id, k.ip, k.ua, k.yol, k.durum, k.bot, k.mobil);
   }
 
+  let mesgulOldu = false;
+
   q(`INSERT INTO crawl_log ${SUTUNLAR} VALUES ${yer}`, degerler)
     .then(() => {
       DURUM.yazilan += parti.length;
@@ -47,18 +49,28 @@ function bosalt() {
       DURUM.hata += 1;
       DURUM.sonHata = e.message;
 
-      // Havuz mesgulse partiyi geri koy, sonraki turda tekrar denenir.
-      // Kalici hatada geri koymak kuyrugu tikar, o yuzden sadece mesgulde.
-      if (e.mesgul && KUYRUK.length + parti.length <= env.CRAWL_LOG_KUYRUK) {
-        KUYRUK.unshift(...parti);
-      } else {
-        DURUM.atilan += parti.length;
-        if (!e.mesgul) log.warn('crawl_log yazilamadi', { hata: e.message });
+      // Havuz mesgulse parti geri konur ve aralik zamanlayicisi tekrar dener.
+      // Hemen tekrar denemek mesgul DB'de mikro gorev dongusu kurar; bu yuzden
+      // mesgulde asagida yeniden tetiklenmez.
+      if (e.mesgul) {
+        mesgulOldu = true;
+
+        if (KUYRUK.length + parti.length <= env.CRAWL_LOG_KUYRUK) {
+          KUYRUK.unshift(...parti);
+        } else {
+          // geri koymak kuyrugu tavanin ustune tasirsa parti atilir
+          DURUM.atilan += parti.length;
+        }
+        return;
       }
+
+      // Kalici hata (sema, kisit): geri koymak kuyrugu tikar, parti atilir.
+      DURUM.atilan += parti.length;
+      log.warn('crawl_log yazilamadi', { hata: e.message });
     })
     .finally(() => {
       calisiyor = false;
-      if (KUYRUK.length >= env.CRAWL_LOG_TOPLU) bosalt();
+      if (!mesgulOldu && KUYRUK.length >= env.CRAWL_LOG_TOPLU) bosalt();
     });
 }
 
