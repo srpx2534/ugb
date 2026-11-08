@@ -1,8 +1,7 @@
 // packages/core/config.mjs
 //
-// Tum ayarlar ortam degiskenlerinden okunur; dosyada sabit sir degeri tutulmaz.
-// ADMIN_PAROLA ve HASH_TUZU uretimde zorunludur, yalnizca dev/test'te
-// varsayilana dusebilir.
+// Tum ayarlar ortam degiskenlerinden okunur. Dosyada tek bir sir degeri yoktur:
+// ADMIN_PAROLA ve HASH_TUZU her ortamda zorunludur, bos birakilirsa modul acilmaz.
 //
 // Oncelik: sistem ortami > cwd/.env > kok/.env.local > kok/.env
 // Sistem ortami (pm2/systemd) hicbir dosya tarafindan ezilmez.
@@ -74,27 +73,6 @@ const hamDeger = (ad) => {
   return typeof deger === 'string' ? deger.trim() : '';
 };
 
-const zorunlu = (ad, minUzunluk = 1) => {
-  const deger = hamDeger(ad);
-  if (deger === '') {
-    throw new Error(`${HATA_ON_EKI} ${ad} tanimli degil. .env dosyasini kontrol edin.`);
-  }
-  if (deger.length < minUzunluk) {
-    throw new Error(`${HATA_ON_EKI} ${ad} en az ${minUzunluk} karakter olmali.`);
-  }
-  return deger;
-};
-
-const opsiyonel = (ad, varsayilan) => hamDeger(ad) || varsayilan;
-
-const mantiksal = (ad, varsayilan) => {
-  const ham = hamDeger(ad).toLowerCase();
-  if (ham === '') return varsayilan;
-  if (['1', 'true', 'evet', 'on', 'yes'].includes(ham)) return true;
-  if (['0', 'false', 'hayir', 'off', 'no'].includes(ham)) return false;
-  throw new Error(`${HATA_ON_EKI} ${ad} mantiksal deger olmali (gelen: ${ham}).`);
-};
-
 const secenek = (ad, izinli, varsayilan) => {
   const ham = hamDeger(ad).toLowerCase();
   if (ham === '') return varsayilan;
@@ -105,7 +83,7 @@ const secenek = (ad, izinli, varsayilan) => {
 };
 
 const saatDilimi = (ad, varsayilan) => {
-  const deger = opsiyonel(ad, varsayilan);
+  const deger = hamDeger(ad) || varsayilan;
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: deger }).format(new Date());
   } catch {
@@ -122,28 +100,35 @@ const ORTAM = secenek('NODE_ENV', ['dev', 'test', 'prod'], 'dev');
 const URETIM_MI = ORTAM === 'prod';
 const TEST_MI = ORTAM === 'test';
 
-// Sir okuyucu: uretimde zorunlu, dev/test'te varsayilana duser.
-const sir = (ad, minUzunluk, varsayilan) => {
+// ---------------------------------------------------------------------------
+// Sirlar: her ortamda zorunlu, varsayilan yok
+// ---------------------------------------------------------------------------
+
+// Ornek dosyadan kopyalanip degistirilmeden birakilan degerleri yakalar.
+const ORNEK_DEGERLER = new Set(['PAROLAPAROLA', 'ugb-tuz-degistir']);
+
+const sir = (ad, minUzunluk) => {
   const deger = hamDeger(ad);
 
   if (deger === '') {
-    if (URETIM_MI) {
-      throw new Error(
-        `${HATA_ON_EKI} ${ad} tanimli degil. Uretimde sabit deger kullanilmaz, .env doldurulmali.`
-      );
-    }
-    return varsayilan;
+    throw new Error(
+      `${HATA_ON_EKI} ${ad} tanimli degil. Sabit varsayilan yok, .env doldurulmali.`
+    );
   }
 
   if (deger.length < minUzunluk) {
     throw new Error(`${HATA_ON_EKI} ${ad} en az ${minUzunluk} karakter olmali.`);
   }
 
+  if (ORNEK_DEGERLER.has(deger) || deger.includes('degistir')) {
+    console.warn(`${HATA_ON_EKI} ${ad} hala ornek degerde: degistirilmeli.`);
+  }
+
   return deger;
 };
 
-const VARSAYILAN_PAROLA = sir('ADMIN_PAROLA', 8, 'PAROLAPAROLA');
-const VARSAYILAN_TUZ = sir('HASH_TUZU', 8, 'ugb-tuz-degistir');
+const VARSAYILAN_PAROLA = sir('ADMIN_PAROLA', 12);
+const VARSAYILAN_TUZ = sir('HASH_TUZU', 16);
 
 // ---------------------------------------------------------------------------
 // Sema
@@ -172,12 +157,12 @@ const Sema = z.object({
   BOT_ZORLA: bayrak('0'),
   BOT_UA_GECER: bayrak('1'),
 
-  HASH_TUZU: z.string().min(8).max(190).default(VARSAYILAN_TUZ),
+  HASH_TUZU: z.string().min(16).max(190),
   LOG_SEVIYE: z.enum(['info', 'warn', 'error']).default('info'),
 
   HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
   HUB_HOST: z.string().min(3).default('hedefb.com'),
-  ADMIN_PAROLA: z.string().min(8).max(190).default(VARSAYILAN_PAROLA),
+  ADMIN_PAROLA: z.string().min(12).max(190),
   DIKEY: z.enum(['bonus', 'canli-mac']).default('bonus'),
 
   SITE_SAAT_DILIMI: z.string().default(saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul')),
@@ -201,12 +186,6 @@ const env = Object.freeze(sonuc.data);
 // ---------------------------------------------------------------------------
 
 if (URETIM_MI) {
-  if (env.ADMIN_PAROLA === 'PAROLAPAROLA') {
-    console.warn('uyari: prod ortamda ADMIN_PAROLA varsayilan degerde');
-  }
-  if (env.HASH_TUZU === 'ugb-tuz-degistir') {
-    console.warn('uyari: prod ortamda HASH_TUZU varsayilan degerde');
-  }
   if (/:3002$/.test(env.HUB_URL)) {
     console.warn(`uyari: prod ortamda HUB_URL varsayilan portlu (${env.HUB_URL})`);
   }
