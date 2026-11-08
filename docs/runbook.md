@@ -5,8 +5,8 @@
 1. `node scripts/domain.mjs ekle <host> carrier kume-1`
    Script küme içinde boş `site_id` ve boş `decoy_id` atar; ikisi de yoksa durur.
 2. Host'u rolüne göre değişkene ekle: `CARRIER_HOSTLAR`, `HUB_HOSTLAR` veya `SPOKE_HOSTLAR`.
-3. Şablonu yeniden üret:
-   `sed -e "s|{{CARRIER_HOSTLAR}}|$CARRIER_HOSTLAR|" -e "s|{{HUB_HOSTLAR}}|$HUB_HOSTLAR|" -e "s|{{SPOKE_HOSTLAR}}|$SPOKE_HOSTLAR|" deploy/nginx.conf.tpl > /etc/nginx/sites-available/ugb`
+3. Şablonu yeniden üret (portlar dahil):
+   `sed -e "s|{{CARRIER_HOSTLAR}}|$CARRIER_HOSTLAR|" -e "s|{{HUB_HOSTLAR}}|$HUB_HOSTLAR|" -e "s|{{SPOKE_HOSTLAR}}|$SPOKE_HOSTLAR|" -e "s|{{CARRIER_PORT}}|$CARRIER_PORT|" -e "s|{{HUB_PORT}}|$HUB_PORT|" -e "s|{{SPOKE_PORT}}|$SPOKE_PORT|" deploy/nginx.conf.tpl > /etc/nginx/sites-available/ugb`
 4. `nginx -t && systemctl reload nginx`
 5. `certbot --nginx -d <host>`
 6. DNS A kaydı sunucu IP'sine
@@ -40,6 +40,16 @@ Gerçek işletme bilgisi girildiğinde `isim`, `adres`, `tel`, `saatler`, `menu`
 
 `x-ugb-bot: 1` başlığı yalnız `NODE_ENV=dev` iken geçerlidir; prod'da spoof edilebilir.
 
+## Ağ ve dinleme
+
+Uygulamalar `DINLEME_HOST` üzerinden dinler, varsayılan `127.0.0.1`. Dışarıya
+yalnız nginx 80/443 açar. `DINLEME_HOST=0.0.0.0` yapılırsa iç portlar da dışarı
+sızar; ufw ile kapatılmalı.
+
+İstemci IP'si `X-Forwarded-For`'un **sağ** ucundan okunur; soldaki değeri
+istemci yazabilir. Cloudflare proxy'si açıksa `CF_ARKADA=1` verilir ve adres
+yalnız `CF-Connecting-IP`'den alınır.
+
 ## AMP
 
 AMP Cache 1 Temmuz 2026'da kapatıldı. AMP yalnız hız için tutuluyor, sıralama avantajı yok. Şablon geçerliliği `amphtml-validator` ile kontrol edilir.
@@ -49,7 +59,7 @@ AMP Cache 1 Temmuz 2026'da kapatıldı. AMP yalnız hız için tutuluyor, sıral
 Cron yalnız tek iş sunucusunda kurulur; ikinci app sunucusuna kurulmaz. `refresh`, `temizle`, `linkcheck`, `dupes` DB kilidi taşıdığı için yanlışlıkla çift çalışsa da ikinci tur beklemede kalır.
 - `refresh` saatlik tetiklenir, her turda sıradaki 4 domain; bir domain ortalama 12 saatte bir yenilenir.
 - `linkcheck` günde bir; `elle_kapali = 1` olan markanın `aktif` alanına dokunmaz.
-- `temizle` haftada bir, `crawl_log` 90 / `clicks` 180 gün.
+- `temizle` haftada bir, `clicks` 180 gün; `crawl_log` için `CRAWL_LOG_SAKLAMA_GUN` (varsayılan 14) geçerlidir ve ayrıca saatte bir parça parça silinir.
 - `dupes` haftada bir; 0.45 üstü örtüşme uyarı.
 - Skin/decoy görselleri: `npm run skins` sonrası `npm run assets` çalıştırılır; favicon yolları ancak böyle gerçek dosyaya bağlanır.
 - Loglar `/var/log/ugb-*.log`, haftalık rotasyon, 8 dosya (`deploy/logrotate.conf`).
@@ -60,3 +70,14 @@ Cron yalnız tek iş sunucusunda kurulur; ikinci app sunucusuna kurulmaz. `refre
 `SELECT COUNT(*) FROM crawl_log WHERE bot = 0 AND ip LIKE '66.249.%' AND created_at > NOW() - INTERVAL 1 DAY;`
 
 Sıfırdan büyükse kapı Google IP'sini kaçırıyor demektir; `bot.mjs` DNS önbelleği ve `TRUST_PROXY` / `CF-Connecting-IP` zinciri kontrol edilir. DNS geçici hatasının 60 saniyede düzelmesi beklenir; sürüyorsa `dnsCacheTemizle()` için süreç yeniden başlatılır.
+
+## Tıklama sayımı
+
+Zincirin yalnız ilk bacağı sayar: carrier veya spoke. Hub'a `?say=0` ile devredilir
+ve hub saymaz. Üç uygulamada da aynı sınır vardır: aynı IP aynı slug için dakikada
+en fazla 3 kez sayılır (`packages/core/tik.mjs`). IP, `HASH_TUZU` ile tuzlanmış
+SHA-256 olarak saklanır; tuz değişirse eski `clicks.ip_hash` ile korelasyon kopar.
+
+Parola ve tuz `openssl rand -hex` ile üretilir; base64 boşluk içermez ama elle
+yazılan değerlerde boşluk olursa `.env` içinde tırnaklanır. Tırnaksız boşluk,
+`. ./.env` ile yapılan doğrulamalarda değeri ikiye böler.

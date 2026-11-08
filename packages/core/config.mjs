@@ -303,6 +303,14 @@ if (URETIM_MI) {
   }
 }
 
+// .env kabukla source edilirse bosluk/ozel karakter degerleri bozar. Uygulama
+// kendi ayristiricisini kullandigi icin calisir, ama dogrulama komutlari sasar.
+const KABUK_RISKLI = ['ADMIN_PAROLA', 'HASH_TUZU', 'DB_PASS'];
+const RISKLI = KABUK_RISKLI.filter((ad) => /\s/.test(env[ad] ?? ''));
+if (RISKLI.length > 0) {
+  console.warn(`${HATA_ON_EKI} ${RISKLI.join(', ')} bosluk iceriyor; .env icinde tirnaklayin ('...')`);
+}
+
 // ---------------------------------------------------------------------------
 // Capraz kontroller
 // Donus: hata listesi (bos = gecerli). Uyarilar burada basilir.
