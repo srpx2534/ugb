@@ -3,16 +3,20 @@
 // Tum ayarlar ortam degiskenlerinden okunur. Dosyada sabit domain, port veya
 // sir degeri yoktur.
 //   ADMIN_PAROLA (min 12), HASH_TUZU (min 16), HUB_URL, HUB_HOST her ortamda
-//   zorunludur. PORT uretimde zorunludur; dev/test'te verilmezse 3000 kullanilir.
+//   zorunludur. PORT uretimde zorunludur.
 //
 // PORT ic (dinleme) portudur: uygulamalar ic portlarda durur, disariya 80'i
 // nginx acar. HUB_URL public adrestir, bu yuzden port tasimaz.
+//
+// Port cozumleme sirasi: PORT > uygulamaya ozel degisken (CARRIER_PORT /
+// HUB_PORT / SPOKE_PORT) > dev-test icin 3000. Uygulama, calisma dizininden
+// cozulur; uretimde PORT'u pm2 verdigi icin esleme devreye girmez.
 //
 // Oncelik: sistem ortami > cwd/.env > kok/.env.local > kok/.env
 // Sistem ortami (pm2/systemd) hicbir dosya tarafindan ezilmez.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
@@ -135,11 +139,22 @@ const URETIM_MI = ORTAM === 'prod';
 const TEST_MI = ORTAM === 'test';
 
 // ---------------------------------------------------------------------------
-// Port: uretimde zorunlu (pm2 verir), dev/test'te rahat calisma icin 3000
+// Port
+// Uretimde PORT zorunludur (pm2 verir). Dev ve test'te, dogrudan
+// `node server.mjs` ile calisirken uygulamaya ozel degisken kullanilir;
+// boylece uc uygulama ayni 3000'e cikmaz.
 // ---------------------------------------------------------------------------
 
+const UYGULAMA = basename(process.cwd());
+
+const UYGULAMA_PORT_ANAHTARI =
+  { carrier: 'CARRIER_PORT', hub: 'HUB_PORT', spoke: 'SPOKE_PORT' }[UYGULAMA] ?? null;
+
 const portCoz = () => {
-  const ham = hamDeger('PORT');
+  const dogrudan = hamDeger('PORT');
+  const yedek = UYGULAMA_PORT_ANAHTARI ? hamDeger(UYGULAMA_PORT_ANAHTARI) : '';
+  const ham = dogrudan !== '' ? dogrudan : yedek;
+  const kaynak = dogrudan !== '' ? 'PORT' : UYGULAMA_PORT_ANAHTARI ?? 'PORT';
 
   if (ham === '') {
     if (URETIM_MI) {
@@ -150,7 +165,7 @@ const portCoz = () => {
 
   const sayi = Number(ham);
   if (!Number.isInteger(sayi) || sayi < 1 || sayi > 65535) {
-    throw new Error(`${HATA_ON_EKI} PORT 1-65535 arasi tam sayi olmali (gelen: ${ham}).`);
+    throw new Error(`${HATA_ON_EKI} ${kaynak} 1-65535 arasi tam sayi olmali (gelen: ${ham}).`);
   }
   return sayi;
 };
@@ -206,6 +221,7 @@ const Sema = z.object({
 
   HUB_HTTPS_ZORLA: bayrak(URETIM_MI ? '1' : '0'),
   HUB_IZINLI_IP: z.string().default(''),
+  HUB_API_KORU: bayrak('1'),
 
   SITE_SAAT_DILIMI: z.string().default(saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul')),
   GUNCELLEME_MIN_DK: z.coerce.number().int().min(0).max(1440).default(5),
@@ -221,7 +237,7 @@ if (!sonuc.success) {
   process.exit(1);
 }
 
-const env = Object.freeze({ ...sonuc.data, PORT });
+const env = Object.freeze({ ...sonuc.data, PORT, UYGULAMA });
 
 // Geriye uyum: bu iki isim artik deger tutmuyor, env'den turetiliyor.
 // Tuketiciler dogrudan env.ADMIN_PAROLA / env.HASH_TUZU de kullanabilir.

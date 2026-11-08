@@ -224,8 +224,12 @@ app.get('/', async (istek, yanit) => {
   return portal({ markalar, blok: linkBlokRender(linkler) });
 });
 
-app.get('/api', async () => {
+// Marka listesi rakip icin degerli: varsayilan olarak kapali.
+// HUB_API_KORU=0 yapilirsa kimlik dogrulamasi istenmez.
+app.get('/api', async (istek, yanit) => {
+  if (env.HUB_API_KORU === '1' && !kapi(istek, yanit)) return;
   const markalar = await q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
+  yanit.header('cache-control', 'no-store');
   return { adet: markalar.length, markalar };
 });
 
