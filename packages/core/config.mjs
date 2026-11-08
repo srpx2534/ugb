@@ -1,44 +1,189 @@
-import { config as envYukle } from 'dotenv';
+// packages/core/config.mjs
+//
+// Tum ayarlar ortam degiskenlerinden okunur; dosyada sabit sir degeri tutulmaz.
+// ADMIN_PAROLA ve HASH_TUZU uretimde zorunludur, yalnizca dev/test'te
+// varsayilana dusebilir.
+//
+// Oncelik: sistem ortami > cwd/.env > kok/.env.local > kok/.env
+// Sistem ortami (pm2/systemd) hicbir dosya tarafindan ezilmez.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { z } from 'zod';
 
-const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const HATA_ON_EKI = '[config]';
+const BU_DOSYA = fileURLToPath(import.meta.url);
+const PROJE_KOKU = resolve(dirname(BU_DOSYA), '..', '..');
 
-// Sistem ortami (pm2/systemd) .env tarafindan ezilmemeli
-const SISTEM_ENV = { ...process.env };
+// ---------------------------------------------------------------------------
+// .env yukleyici
+// Bagimlilik eklememek icin minimal. Korunan anahtarlar (acilista sistemde
+// tanimli olanlar) hicbir zaman dosyadan yazilmaz.
+// ---------------------------------------------------------------------------
 
-envYukle({ path: path.join(KOK, '.env') });
-envYukle({ path: path.join(process.cwd(), '.env'), override: true });
+const KORUMALI = new Set(Object.keys(process.env));
 
-for (const [k, v] of Object.entries(SISTEM_ENV)) process.env[k] = v;
+const envDosyasiOku = (yol, { ustuneYaz = false } = {}) => {
+  if (!existsSync(yol)) return;
 
-const VARSAYILAN_PAROLA = 'PAROLAPAROLA';
-const VARSAYILAN_TUZ = 'ugb-tuz-degistir';
+  for (const satir of readFileSync(yol, 'utf8').split(/\r?\n/)) {
+    const temiz = satir.trim();
+    if (temiz === '' || temiz.startsWith('#')) continue;
 
+    const esitlik = temiz.indexOf('=');
+    if (esitlik < 1) continue;
 
+    const anahtar = temiz.slice(0, esitlik).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(anahtar)) continue;
+    if (KORUMALI.has(anahtar)) continue;
+    if (!ustuneYaz && process.env[anahtar] !== undefined) continue;
+
+    let deger = temiz.slice(esitlik + 1).trim();
+
+    const tirnakli =
+      deger.length >= 2 &&
+      ((deger.startsWith('"') && deger.endsWith('"')) ||
+        (deger.startsWith("'") && deger.endsWith("'")));
+
+    if (tirnakli) {
+      deger = deger.slice(1, -1);
+    } else {
+      const yorum = deger.indexOf(' #');
+      if (yorum > -1) deger = deger.slice(0, yorum).trim();
+    }
+
+    process.env[anahtar] = deger;
+  }
+};
+
+envDosyasiOku(resolve(PROJE_KOKU, '.env'));
+envDosyasiOku(resolve(PROJE_KOKU, '.env.local'), { ustuneYaz: true });
+
+const CALISMA_DIZINI = process.cwd();
+if (CALISMA_DIZINI !== PROJE_KOKU) {
+  envDosyasiOku(resolve(CALISMA_DIZINI, '.env'), { ustuneYaz: true });
+}
+
+// ---------------------------------------------------------------------------
+// Okuma yardimcilari
+// ---------------------------------------------------------------------------
+
+const hamDeger = (ad) => {
+  const deger = process.env[ad];
+  return typeof deger === 'string' ? deger.trim() : '';
+};
+
+const zorunlu = (ad, minUzunluk = 1) => {
+  const deger = hamDeger(ad);
+  if (deger === '') {
+    throw new Error(`${HATA_ON_EKI} ${ad} tanimli degil. .env dosyasini kontrol edin.`);
+  }
+  if (deger.length < minUzunluk) {
+    throw new Error(`${HATA_ON_EKI} ${ad} en az ${minUzunluk} karakter olmali.`);
+  }
+  return deger;
+};
+
+const opsiyonel = (ad, varsayilan) => hamDeger(ad) || varsayilan;
+
+const mantiksal = (ad, varsayilan) => {
+  const ham = hamDeger(ad).toLowerCase();
+  if (ham === '') return varsayilan;
+  if (['1', 'true', 'evet', 'on', 'yes'].includes(ham)) return true;
+  if (['0', 'false', 'hayir', 'off', 'no'].includes(ham)) return false;
+  throw new Error(`${HATA_ON_EKI} ${ad} mantiksal deger olmali (gelen: ${ham}).`);
+};
+
+const secenek = (ad, izinli, varsayilan) => {
+  const ham = hamDeger(ad).toLowerCase();
+  if (ham === '') return varsayilan;
+  if (!izinli.includes(ham)) {
+    throw new Error(`${HATA_ON_EKI} ${ad} su degerlerden biri olmali: ${izinli.join(', ')}.`);
+  }
+  return ham;
+};
+
+const saatDilimi = (ad, varsayilan) => {
+  const deger = opsiyonel(ad, varsayilan);
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: deger }).format(new Date());
+  } catch {
+    throw new Error(`${HATA_ON_EKI} ${ad} gecersiz saat dilimi: ${deger}`);
+  }
+  return deger;
+};
+
+// ---------------------------------------------------------------------------
+// Ortam
+// ---------------------------------------------------------------------------
+
+const ORTAM = secenek('NODE_ENV', ['dev', 'test', 'prod'], 'dev');
+const URETIM_MI = ORTAM === 'prod';
+const TEST_MI = ORTAM === 'test';
+
+// Sir okuyucu: uretimde zorunlu, dev/test'te varsayilana duser.
+const sir = (ad, minUzunluk, varsayilan) => {
+  const deger = hamDeger(ad);
+
+  if (deger === '') {
+    if (URETIM_MI) {
+      throw new Error(
+        `${HATA_ON_EKI} ${ad} tanimli degil. Uretimde sabit deger kullanilmaz, .env doldurulmali.`
+      );
+    }
+    return varsayilan;
+  }
+
+  if (deger.length < minUzunluk) {
+    throw new Error(`${HATA_ON_EKI} ${ad} en az ${minUzunluk} karakter olmali.`);
+  }
+
+  return deger;
+};
+
+const VARSAYILAN_PAROLA = sir('ADMIN_PAROLA', 8, 'PAROLAPAROLA');
+const VARSAYILAN_TUZ = sir('HASH_TUZU', 8, 'ugb-tuz-degistir');
+
+// ---------------------------------------------------------------------------
+// Sema
+// ---------------------------------------------------------------------------
+
+const bayrak = (varsayilan) => z.enum(['0', '1']).default(varsayilan);
 
 const Sema = z.object({
   NODE_ENV: z.enum(['dev', 'test', 'prod']).default('dev'),
   SITE_ID: z.coerce.number().int().min(1).max(999).default(1),
   PORT: z.coerce.number().int().min(1024).max(65535).default(3000),
+
   DB_HOST: z.string().min(1).max(190),
   DB_PORT: z.coerce.number().int().min(1).max(65535).default(3306),
   DB_NAME: z.string().regex(/^[a-z0-9_]{1,64}$/, 'kucuk harf, rakam, alt cizgi'),
   DB_USER: z.string().min(1).max(64),
   DB_PASS: z.string().min(16),
   DB_POOL: z.coerce.number().int().min(1).max(50).default(10),
+
   HOSTMAP_TTL_MS: z.coerce.number().int().min(5000).max(600000).default(60000),
-  TRUST_PROXY: z.string().default('false').transform((v) => ['1', 'true', 'evet', 'yes'].includes(v.toLowerCase())),
-  CF_ARKADA: z.enum(['0', '1']).default('0'),
-  BOT_ZORLA: z.enum(['0', '1']).default('0'),
-  BOT_UA_GECER: z.enum(['0', '1']).default('1'),
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((v) => ['1', 'true', 'evet', 'yes'].includes(v.toLowerCase())),
+  CF_ARKADA: bayrak('0'),
+  BOT_ZORLA: bayrak('0'),
+  BOT_UA_GECER: bayrak('1'),
+
   HASH_TUZU: z.string().min(8).max(190).default(VARSAYILAN_TUZ),
   LOG_SEVIYE: z.enum(['info', 'warn', 'error']).default('info'),
+
   HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
   HUB_HOST: z.string().min(3).default('hedefb.com'),
-  ADMIN_PAROLA: z.string().min(8).default(VARSAYILAN_PAROLA),
+  ADMIN_PAROLA: z.string().min(8).max(190).default(VARSAYILAN_PAROLA),
   DIKEY: z.enum(['bonus', 'canli-mac']).default('bonus'),
+
+  SITE_SAAT_DILIMI: z.string().default(saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul')),
+  GUNCELLEME_MIN_DK: z.coerce.number().int().min(0).max(1440).default(5),
+  GUNCELLEME_MAX_DK: z.coerce.number().int().min(0).max(1440).default(45),
+  CEREZ_GUVENLI: bayrak(URETIM_MI ? '1' : '0'),
 });
 
 const sonuc = Sema.safeParse(process.env);
@@ -49,24 +194,110 @@ if (!sonuc.success) {
   process.exit(1);
 }
 
-if (sonuc.data.NODE_ENV === 'prod') {
-  if (sonuc.data.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
+const env = Object.freeze(sonuc.data);
+
+// ---------------------------------------------------------------------------
+// Uretim uyarilari
+// ---------------------------------------------------------------------------
+
+if (URETIM_MI) {
+  if (env.ADMIN_PAROLA === 'PAROLAPAROLA') {
     console.warn('uyari: prod ortamda ADMIN_PAROLA varsayilan degerde');
   }
-  if (sonuc.data.HASH_TUZU === VARSAYILAN_TUZ) {
+  if (env.HASH_TUZU === 'ugb-tuz-degistir') {
     console.warn('uyari: prod ortamda HASH_TUZU varsayilan degerde');
   }
-  if (/:3002$/.test(sonuc.data.HUB_URL)) {
-    console.warn(`uyari: prod ortamda HUB_URL varsayilan portlu (${sonuc.data.HUB_URL})`);
+  if (/:3002$/.test(env.HUB_URL)) {
+    console.warn(`uyari: prod ortamda HUB_URL varsayilan portlu (${env.HUB_URL})`);
   }
-  if (sonuc.data.CF_ARKADA === '1' && !sonuc.data.TRUST_PROXY) {
+  if (env.CF_ARKADA === '1' && !env.TRUST_PROXY) {
     console.warn('uyari: CF_ARKADA=1 ama TRUST_PROXY kapali');
+  }
+  if (env.CEREZ_GUVENLI === '0') {
+    console.warn('uyari: prod ortamda CEREZ_GUVENLI=0');
   }
 }
 
-export const env = Object.freeze(sonuc.data);
-export const isProd = env.NODE_ENV === 'prod';
-export { VARSAYILAN_PAROLA, VARSAYILAN_TUZ };
+// ---------------------------------------------------------------------------
+// Capraz kontroller
+// ---------------------------------------------------------------------------
+
+export const dogrula = () => {
+  const hatalar = [];
+  const uyarilar = [];
+
+  if (env.GUNCELLEME_MIN_DK > env.GUNCELLEME_MAX_DK) {
+    hatalar.push('GUNCELLEME_MIN_DK, GUNCELLEME_MAX_DK degerinden buyuk olamaz.');
+  }
+  if (env.GUNCELLEME_MIN_DK === env.GUNCELLEME_MAX_DK) {
+    uyarilar.push('Guncelleme araligi sabit; damga her istekte ayni dakikaya duser.');
+  }
+  if (env.HASH_TUZU === env.ADMIN_PAROLA) {
+    hatalar.push('HASH_TUZU ile ADMIN_PAROLA ayni olamaz.');
+  }
+  if (URETIM_MI && env.CEREZ_GUVENLI === '0') {
+    hatalar.push('Uretimde CEREZ_GUVENLI=1 olmali.');
+  }
+  if (TEST_MI && URETIM_MI) {
+    hatalar.push('Ortam ayni anda test ve uretim olamaz.');
+  }
+
+  for (const uyari of uyarilar) console.warn(`${HATA_ON_EKI} ${uyari}`);
+  if (hatalar.length > 0) {
+    throw new Error(`${HATA_ON_EKI} gecersiz yapilandirma:\n- ${hatalar.join('\n- ')}`);
+  }
+
+  return true;
+};
+
+// ---------------------------------------------------------------------------
+// Yardimci: ISO 8601 guncelleme damgasi
+// ---------------------------------------------------------------------------
+
+const parcalariAl = (tarih, dilim) =>
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: dilim,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(tarih);
+
+const ofsetAl = (tarih, dilim) => {
+  const parca = new Intl.DateTimeFormat('en-US', {
+    timeZone: dilim,
+    timeZoneName: 'longOffset',
+  })
+    .formatToParts(tarih)
+    .find((p) => p.type === 'timeZoneName');
+
+  const eslesme = /GMT([+-]\d{2}:\d{2})/.exec(parca?.value ?? '');
+  return eslesme ? eslesme[1] : '+00:00';
+};
+
+// Simdiki zamandan MIN..MAX dakika geriye dusulmus, saat dilimi ofsetli damga.
+export const sonGuncellemeDamgasi = (taban = new Date()) => {
+  const aralik = env.GUNCELLEME_MAX_DK - env.GUNCELLEME_MIN_DK;
+  const fark = env.GUNCELLEME_MIN_DK + Math.floor(Math.random() * (aralik + 1));
+  const tarih = new Date(taban.getTime() - fark * 60_000);
+
+  const p = Object.fromEntries(
+    parcalariAl(tarih, env.SITE_SAAT_DILIMI)
+      .filter((parca) => parca.type !== 'literal')
+      .map((parca) => [parca.type, parca.value])
+  );
+
+  const saat = p.hour === '24' ? '00' : p.hour;
+
+  return `${p.year}-${p.month}-${p.day}T${saat}:${p.minute}:${p.second}${ofsetAl(tarih, env.SITE_SAAT_DILIMI)}`;
+};
+
+// ---------------------------------------------------------------------------
+// Host / slug dogrulama
+// ---------------------------------------------------------------------------
 
 const ETIKET = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 const TLD = /^[a-z0-9]{2,}$/;
@@ -91,7 +322,7 @@ export function kokHostNormalize(host) {
   return h;
 }
 
-// URL icinde kullanilacak host parcasi: IPv6 paranteze alinir, aksi hâlde
+// URL icinde kullanilacak host parcasi: IPv6 paranteze alinir, aksi halde
 // "https://::1/" gibi gecersiz adres cikar
 export function kokUrlHost(host) {
   const h = kokHostNormalize(host);
@@ -124,3 +355,12 @@ export function hostGecerli(host) {
 export function slugGecerli(slug) {
   return typeof slug === 'string' && slug.length <= 190 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
 }
+
+// ---------------------------------------------------------------------------
+// Disa aktarim
+// ---------------------------------------------------------------------------
+
+export { env, VARSAYILAN_PAROLA, VARSAYILAN_TUZ };
+export const isProd = URETIM_MI;
+export const AYAR = env;
+export default env;
