@@ -51,6 +51,7 @@ Cron yalnız tek iş sunucusunda kurulur; ikinci app sunucusuna kurulmaz. `refre
 - `linkcheck` günde bir; `elle_kapali = 1` olan markanın `aktif` alanına dokunmaz.
 - `temizle` haftada bir, `crawl_log` 90 / `clicks` 180 gün.
 - `dupes` haftada bir; 0.45 üstü örtüşme uyarı.
+- Skin/decoy görselleri: `npm run skins` sonrası `npm run assets` çalıştırılır; favicon yolları ancak böyle gerçek dosyaya bağlanır.
 - Loglar `/var/log/ugb-*.log`, haftalık rotasyon, 8 dosya (`deploy/logrotate.conf`).
 - Yedek ayrı sistemde yürür; RPO/RTO oradan izlenir.
 

@@ -82,6 +82,8 @@ async function koru(fn) {
 
 const opts = (ek) => ({ timeout: env.DB_SORGU_ZAMAN_ASIMI_MS, ...ek });
 
+const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // ---------------------------------------------------------------------------
 // Sorgular
 // ---------------------------------------------------------------------------
@@ -128,13 +130,16 @@ export async function tx(fn) {
   return koru(async () => {
     const c = await pool.getConnection();
     const { soz, durdur } = islemZamanAsimi();
+    const is = fn(c);
 
     try {
-      await c.beginTransaction();
-      const sonuc = await Promise.race([fn(c), soz]);
+      const sonuc = await Promise.race([is, soz]);
       await c.commit();
       return sonuc;
     } catch (e) {
+      // Zaman asiminda fn hala calisiyor olabilir. Baglanti serbest birakilmadan
+      // once kisa sure beklenir; aksi halde sorgu baska istege verilmis baglantiya gider.
+      await Promise.race([is.catch(() => {}), bekle(1500)]);
       try {
         await c.rollback();
       } catch {

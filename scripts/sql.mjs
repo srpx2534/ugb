@@ -1,10 +1,13 @@
 // Kullanim: node scripts/sql.mjs "SELECT * FROM domains"
+//           node scripts/sql.mjs --deger "SELECT COUNT(*) FROM domains"
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
-const sorgu = process.argv.slice(2).join(' ').trim();
+const DEGER = process.argv[2] === '--deger';
+const sorgu = process.argv.slice(DEGER ? 3 : 2).join(' ').trim();
+
 if (!sorgu) {
-  console.error('kullanim: node scripts/sql.mjs "SELECT ..."');
+  console.error('kullanim: node scripts/sql.mjs [--deger] "SELECT ..."');
   process.exit(1);
 }
 
@@ -19,7 +22,13 @@ const bag = await mysql.createConnection({
 
 try {
   const [satirlar] = await bag.query(sorgu);
-  if (Array.isArray(satirlar)) {
+
+  if (DEGER) {
+    // Scriptler icin: tek satir tek sutun degeri, suslemesiz
+    const ilk = Array.isArray(satirlar) ? satirlar[0] : null;
+    const deger = ilk ? Object.values(ilk)[0] : '';
+    console.log(deger === null || deger === undefined ? '' : String(deger));
+  } else if (Array.isArray(satirlar)) {
     if (!satirlar.length) console.log('(bos)');
     else console.table(satirlar);
   } else {

@@ -1,7 +1,8 @@
-import { isProd } from './config.mjs';
+import { env, isProd } from './config.mjs';
 
 const SEVIYE = { info: 30, warn: 40, error: 50 };
-const ESIK = SEVIYE[process.env.LOG_SEVIYE ?? 'info'] ?? 30;
+// Sema dogrulamasindan gecmis deger kullanilir; ham process.env'e bakilmaz.
+const ESIK = SEVIYE[env.LOG_SEVIYE] ?? 30;
 
 function yaz(seviye, mesaj, alan) {
   if (SEVIYE[seviye] < ESIK) return;

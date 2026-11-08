@@ -7,7 +7,9 @@ export const SITE_ADLARI = [
   'Deneme Rehberi Plus',
 ];
 
+// site_id 1 tabanli; 0, negatif veya sayisiz degerde de gecerli isim doner.
 export function siteAdi(siteId) {
-  if (!siteId) return 'Bonus Liste';
-  return SITE_ADLARI[(Number(siteId) - 1) % SITE_ADLARI.length];
+  const n = Number(siteId);
+  if (!Number.isFinite(n) || n < 1) return 'Bonus Liste';
+  return SITE_ADLARI[(Math.trunc(n) - 1) % SITE_ADLARI.length];
 }

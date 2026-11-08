@@ -14,7 +14,7 @@ import { log } from '@ugb/core/log';
 import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
-import { sitemap } from '@ugb/core/html';
+import { kacis, sitemap } from '@ugb/core/html';
 import { istanbulIso } from '@ugb/core/freshness';
 import { portal } from './views/portal.mjs';
 import { panel } from './views/panel.mjs';
@@ -206,8 +206,9 @@ app.get('/l/:slug', async (istek, yanit) => {
   }
 
   if (!marka.url) {
+    const ad = kacis(marka.ad);
     yanit.type('text/html; charset=utf-8');
-    return `<!doctype html><meta charset="utf-8"><title>${marka.ad}</title><body style="font:16px system-ui;padding:40px"><h1>${marka.ad}</h1><p>Hedef adres henüz tanımlı değil.</p></body>`;
+    return `<!doctype html><meta charset="utf-8"><title>${ad}</title><body style="font:16px system-ui;padding:40px"><h1>${ad}</h1><p>Hedef adres henüz tanımlı değil.</p></body>`;
   }
 
   yanit.header('cache-control', 'no-store');

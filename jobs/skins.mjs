@@ -1,6 +1,9 @@
 // Kaynak veriyi ice alir.
 //   node jobs/skins.mjs        -> db/skins.json varsa ondan, ag istegi yok
 //   node jobs/skins.mjs --cek  -> kaynaktan cekip snapshot'i yeniler
+//
+// favicon yolu her zaman yerel uretimden turetilir (jobs/assets.mjs N.svg yazar).
+// Snapshot'taki ad yalnizca "favicon var" kanitidir; yol tasimasi beklenmez.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -38,6 +41,7 @@ function ayikla(ham, siteId) {
   const ana = colors?.colors?.primary?.main;
   if (!/^#[0-9A-Fa-f]{6}$/.test(String(ana ?? ''))) throw new Error(`site ${siteId} primary.main yok`);
 
+  // yalnizca varlik kaniti: dosya adi bos olmasin
   const favicon = String(s.favicon ?? '').trim().replace(/^.*\//, '');
   if (!favicon) throw new Error(`site ${siteId} favicon yok`);
 
@@ -64,14 +68,19 @@ async function snapshotOku() {
   return kayitlar;
 }
 
+// Tek kaynak: assets job'inin urettigi dosya adi
+function faviconYolu(siteId) {
+  return `/assets/favicon/${siteId}.svg`;
+}
+
 async function yaz(kayitlar) {
   await tx(async (c) => {
     for (const k of kayitlar) {
       await c.execute(
         `INSERT INTO skins (site_id, colors, favicon)
          VALUES (:site_id, :colors, :favicon)
-         ON DUPLICATE KEY UPDATE colors = VALUES(colors)`,
-        { site_id: k.site_id, colors: JSON.stringify(k.colors), favicon: k.favicon }
+         ON DUPLICATE KEY UPDATE colors = VALUES(colors), favicon = VALUES(favicon)`,
+        { site_id: k.site_id, colors: JSON.stringify(k.colors), favicon: faviconYolu(k.site_id) }
       );
     }
   });
@@ -113,17 +122,19 @@ async function dagit() {
       log.info('skin atandi', { domain_id: d.id, site_id: site, renk: renkHarita.get(site), kume_id });
     }
 
-    if (oncelikli.length < boslar.length) {
+    if (boslar.length > oncelikli.length) {
       log.warn('renk tekrari kacinilmadi', { kume_id, eksik: boslar.length - oncelikli.length });
     }
   }
 }
 
 try {
-  const kayitlar = process.argv.includes('--cek') ? await cekHepsi() : await snapshotOku();
+  const kaynaktan = process.argv.includes('--cek');
+  const kayitlar = kaynaktan ? await cekHepsi() : await snapshotOku();
   await yaz(kayitlar);
   await dagit();
-  log.info('bitti', { kaynak: process.argv.includes('--cek') ? 'kaynak' : 'snapshot' });
+  log.info('bitti', { kaynak: kaynaktan ? 'kaynak' : 'snapshot' });
+  log.info('favicon dosyalari icin: npm run assets');
 } catch (e) {
   log.error('skins hatasi', { hata: e.message });
   process.exitCode = 1;

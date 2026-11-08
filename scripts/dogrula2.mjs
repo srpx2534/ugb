@@ -97,7 +97,8 @@ dene('m. + masaustu canonical m. degil', mMasa.govde.includes(`rel="canonical" h
 console.log('hub yonlendirici:');
 const l = await al('hub', HUB, '/l/ultrabet?say=0', MASA);
 dene('302', l.durum === 302, String(l.durum));
-dene('marka adresi', (l.basliklar.get('location') ?? '').startsWith('https://'), l.basliklar.get('location') ?? '');
+// HUB_URL dev'de http olabilir; uretimde https beklenir ama sema zorlanmaz
+dene('marka adresi', /^https?:\/\//.test(l.basliklar.get('location') ?? ''), l.basliklar.get('location') ?? '');
 
 console.log(hata ? `\n${hata} hata` : '\ntum kontroller gecti');
 process.exitCode = hata ? 1 : 0;

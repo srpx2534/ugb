@@ -24,6 +24,15 @@ const HATA_ON_EKI = '[config]';
 const BU_DOSYA = fileURLToPath(import.meta.url);
 const PROJE_KOKU = resolve(dirname(BU_DOSYA), '..', '..');
 
+// Tek cikis noktasi: yigin izi yerine okunur liste basilir.
+const bitir = (satirlar) => {
+  console.error('env hatasi:');
+  for (const s of satirlar) console.error(`  ${s}`);
+  process.exit(1);
+};
+
+const sadeMesaj = (e) => String(e?.message ?? e).replace(/^\[config\]\s*/, '');
+
 // ---------------------------------------------------------------------------
 // .env yukleyici
 // Bagimlilik eklememek icin minimal. Korunan anahtarlar (acilista sistemde
@@ -85,7 +94,7 @@ const hamDeger = (ad) => {
 const zorunlu = (ad) => {
   const deger = hamDeger(ad);
   if (deger === '') {
-    throw new Error(`${HATA_ON_EKI} ${ad} tanimli degil. Sabit varsayilan yok, .env doldurulmali.`);
+    throw new Error(`${ad} tanimli degil. Sabit varsayilan yok, .env doldurulmali.`);
   }
   return deger;
 };
@@ -118,11 +127,11 @@ const publicAdres = (ad) => {
   try {
     u = new URL(ham);
   } catch {
-    throw new Error(`${HATA_ON_EKI} ${ad} gecerli bir URL degil: ${ham}`);
+    throw new Error(`${ad} gecerli bir URL degil: ${ham}`);
   }
 
   if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-    throw new Error(`${HATA_ON_EKI} ${ad} http veya https ile baslamali.`);
+    throw new Error(`${ad} http veya https ile baslamali.`);
   }
 
   if (u.port === '80' || u.port === '443') u.port = '';
@@ -170,7 +179,12 @@ const portCoz = () => {
   return sayi;
 };
 
-const PORT = portCoz();
+let PORT;
+try {
+  PORT = portCoz();
+} catch (e) {
+  bitir([sadeMesaj(e)]);
+}
 
 // ---------------------------------------------------------------------------
 // Sema
@@ -233,24 +247,30 @@ const Sema = z.object({
   CEREZ_GUVENLI: bayrak(URETIM_MI ? '1' : '0'),
 });
 
-const sonuc = Sema.safeParse({ ...process.env, HUB_URL: publicAdres('HUB_URL') });
+// HUB_URL semadan once dogrulanir; hatasi yigin izi yerine listeye girer.
+let hubUrl;
+try {
+  hubUrl = publicAdres('HUB_URL');
+} catch (e) {
+  bitir([`HUB_URL: ${sadeMesaj(e)}`]);
+}
+
+const sonuc = Sema.safeParse({ ...process.env, HUB_URL: hubUrl });
 
 if (!sonuc.success) {
-  console.error('env hatasi:');
-
   // zod 4'te path bos dizi olabilir; etiket yine okunur kalsin.
   const sorunlar = Array.isArray(sonuc.error?.issues) ? sonuc.error.issues : [];
 
   if (sorunlar.length === 0) {
-    console.error(`  ${sonuc.error?.message ?? 'bilinmeyen hata'}`);
-  } else {
-    for (const i of sorunlar) {
-      const yol = Array.isArray(i.path) && i.path.length > 0 ? i.path.join('.') : '(kok)';
-      console.error(`  ${yol}: ${i.message}`);
-    }
+    bitir([sonuc.error?.message ?? 'bilinmeyen hata']);
   }
 
-  process.exit(1);
+  bitir(
+    sorunlar.map((i) => {
+      const yol = Array.isArray(i.path) && i.path.length > 0 ? i.path.join('.') : '(kok)';
+      return `${yol}: ${i.message}`;
+    })
+  );
 }
 
 const env = Object.freeze({ ...sonuc.data, PORT, UYGULAMA });
@@ -285,6 +305,7 @@ if (URETIM_MI) {
 
 // ---------------------------------------------------------------------------
 // Capraz kontroller
+// Donus: hata listesi (bos = gecerli). Uyarilar burada basilir.
 // ---------------------------------------------------------------------------
 
 export const dogrula = () => {
@@ -308,15 +329,12 @@ export const dogrula = () => {
   }
 
   for (const uyari of uyarilar) console.warn(`${HATA_ON_EKI} ${uyari}`);
-  if (hatalar.length > 0) {
-    throw new Error(`${HATA_ON_EKI} gecersiz yapilandirma:\n- ${hatalar.join('\n- ')}`);
-  }
-
-  return true;
+  return hatalar;
 };
 
 // Acilista calisir: kontroller olu kod kalmasin, hatali env ile ayaga kalkilmasin.
-dogrula();
+const ACILIS_HATALARI = dogrula();
+if (ACILIS_HATALARI.length > 0) bitir(ACILIS_HATALARI);
 
 // ---------------------------------------------------------------------------
 // Yardimci: guncelleme dakikasi ve ISO 8601 damgasi

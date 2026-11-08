@@ -41,6 +41,7 @@ echo "  ok"
 
 echo "== birim testleri =="
 npm test
+TEST_SONUC="gecti"
 
 echo "== klasorler =="
 rm -rf "dist/${AD}"
@@ -80,7 +81,7 @@ KURULUM
   "damga_utc": "${DAMGA}",
   "node": "$(node -v)",
   "npm": "$(npm -v)",
-  "test": "68/68 ok",
+  "test": "${TEST_SONUC}",
   "sozdizimi": "ok",
   "audit_uretim": "kritik yok"
 }

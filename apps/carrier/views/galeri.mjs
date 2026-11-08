@@ -1,13 +1,16 @@
-import { svgYerine } from '@ugb/core/decoy';
+import { kacis } from '@ugb/core/html';
 import { layout } from './layout.mjs';
 
 const FOTO = ['1.png', '2.png', '3.png', '4.png', '5.png', '6.png'];
 
 export function galeri(d, canonical) {
-  const adet = Math.min(Math.max(d.fotolar, 1), FOTO.length);
+  // fotolar NULL/bozuksa varsayilana dus, NaN ile bos galeri basilmasin
+  const adet = Math.min(Math.max(Number(d.fotolar) || FOTO.length, 1), FOTO.length);
+
   const kareler = Array.from({ length: adet }, (_, i) => {
     const dosya = FOTO[i % FOTO.length];
-    return `<img src="/assets/img/galeri/${dosya}" alt="${d.isim} ${i + 1}" width="400" height="300" loading="lazy">`;
+    const alt = `${d.isim} ${i + 1}`;
+    return `<img src="/assets/img/galeri/${dosya}" alt="${kacis(alt)}" width="400" height="300" loading="lazy">`;
   }).join('');
 
   const govde = `

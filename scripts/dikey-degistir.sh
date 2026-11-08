@@ -15,12 +15,21 @@ if [ ! -f packages/core/dikey.mjs ]; then
   exit 1
 fi
 
+# .env yoksa olusturulur; grep -q set -e altinda patlamasin
+[ -f .env ] || : >.env
+
 if grep -q '^DIKEY=' .env; then
   sed -i "s/^DIKEY=.*/DIKEY=${YENI}/" .env
 else
-  printf '\nDIKEY=%s\n' "$YENI" >> .env
+  printf 'DIKEY=%s\n' "$YENI" >> .env
 fi
-grep -q '^DIKEY=' .env.example || printf '\nDIKEY=%s\n' "$YENI" >> .env.example
+
+[ -f .env.example ] || : >.env.example
+if grep -q '^DIKEY=' .env.example; then
+  sed -i "s/^DIKEY=.*/DIKEY=${YENI}/" .env.example
+else
+  printf 'DIKEY=%s\n' "$YENI" >> .env.example
+fi
 grep -n '^DIKEY=' .env
 
 echo

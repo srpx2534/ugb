@@ -8,7 +8,7 @@ export function iletisim(d, canonical) {
     <h1>Contact</h1>
     <p>${kacis(d.adres)}<br>${kacis(d.sehir)}, ${kacis(d.bolge)} ${kacis(d.posta)}</p>
     <p><a href="tel:${kacis(d.tel.replace(/[^\d+]/g, ''))}">${kacis(d.tel)}</a> · <a href="mailto:${kacis(d.eposta)}">${kacis(d.eposta)}</a></p>
-    <form method="post" action="/pages/contact">
+    <form method="get" action="/pages/contact">
       <label for="ad">Name</label>
       <input id="ad" name="ad" required>
       <label for="eposta">Email</label>

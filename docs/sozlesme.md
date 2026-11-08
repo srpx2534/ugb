@@ -184,6 +184,29 @@ D-55 Hub ve spoke'ta güvenlik başlığı ve Googlebot robots bloğu yoktu → 
 D-56 app-kur.sh .env'i tırnaksız yazıyordu, $ içeren parola bozuluyordu → printf %q.
 D-57 zod 3→4, vitest 2→5, vite 8; esbuild postinstall onayı README'ye girdi. Kanıt: npm audit (vitest 5 sonrası 0 beklenir).
 
+### 16.6 Yedinci turda eklenen maddeler
+
+D-58 `views/galeri.mjs` alt niteliğinde `d.isim` kaçışsızdı, `svgYerine` ölü importtu, `d.fotolar` bozuksa galeri boş basılıyordu → `kacis()`, ölü import silindi, `Number()||6` ile sınırlandı.
+D-59 `views/iletisim.mjs` formu `POST` idi; ne rota ne urlencoded parser vardı, gönderim 404/415 dönüyordu → form `GET`'e çekildi, mevcut `GET /pages/contact` karşılıyor. Kanıt: `?ad=…` ile 200.
+D-60 hub `/l/:slug` "hedef tanımlı değil" HTML'inde `marka.ad` kaçışsızdı → `kacis()`.
+D-61 `scripts/carrier-ekle.sh` `npm run sql` çıktısını sayı sanıyordu (`console.table`), karşılaştırmalar ve `UPDATE … decoy_id = ${D}` bozuktu → `scripts/sql.mjs --deger` eklendi, script sayısal karşılaştırma ve boş-decoy kontrolüyle yeniden yazıldı, 21 taşıyıcı sınırı uygulandı.
+D-62 `db/skins.json` favicon değerleri var olmayan `.png` dosyalarına bakıyordu → gerçek `.svg` yollarına çevrildi; `skins.mjs` yol taşımayan değeri `/assets/favicon/` ile normalize ediyor. Kanıt: `npm run assets` sonrası 21 satır `.svg`.
+D-63 `skins.mjs` olumsuz önbelleği olumluyla aynı 60 sn'ydi → 30 sn'ye ayrıldı (`decoy.mjs` ile aynı desen).
+D-64 `siteadi.mjs` `siteId` 0/negatif/sayısızken `undefined` dönüyordu → `Number.isFinite` + `Math.trunc` koruması.
+D-65 `db.mjs` `tx()` zaman aşımında `fn` sürerken bağlantıyı bırakıyordu → bağlantı, iş kısa süre beklenerek (en çok 1,5 sn) bırakılıyor.
+D-66 `log.mjs` `process.env.LOG_SEVIYE`'yi ham okuyordu, şemadaki `env.LOG_SEVIYE` yok sayılıyordu → doğrulanmış değer kullanılıyor.
+D-67 `jobs/temizle.mjs` `crawl_log` için 90 günü sabit tutuyordu, `CRAWL_LOG_SAKLAMA_GUN` yok sayılıyordu → env'e bağlandı, tek turda 200k satır sınırı.
+D-68 `crawl_log.created_at` tek başına indekssizdi, haftalık budama tam tarama yapıyordu → `0024_crawl_log_zaman.sql`.
+D-69 `scripts/sql.mjs` tek değer basamıyordu → `--deger` kipi (scriptler için suslemesiz çıktı).
+D-70 `scripts/node22-test.sh` `win-x64` yolunu sabitliyordu → `uname` ile platform seçimi, Linux'ta `tar.xz`.
+D-71 `scripts/dikey-degistir.sh` `.env` yokken `grep -q` ile `set -e` altında çıkıyordu → dosya yoksa oluşturuluyor.
+D-72 `deploy/derle.sh` künyesine sabit `"test": "68/68 ok"` yazıyordu → gerçek koşudan sonra `gecti`.
+D-73 `scripts/dogrula2.mjs` hub yönlendirmesinde yalnız `https://` kabul ediyordu, dev'de `http://` ile düşüyordu → `/^https?:\/\//`.
+D-74 `apps/hub/views/panel.mjs` `havuz` parametresini yok sayıyordu → havuz satırı basılıyor. Kanıt: panelde `havuz:` görünür.
+D-75 Test koşusu `dist/` kopyalarını da tarıyordu (88 yerine 316 test) → `vitest.config.mjs`, `include` yalnız `packages/core/test`, `exclude` `dist` + `node_modules`. Kanıt: 88 test.
+D-76 `jobs/skins.mjs` favicon'u var olan satırda hiç güncellemiyordu, yeni satırda ise yolsuz dosya adı yazıyordu (`/pages/boarding_item_1.png`) → yol `site_id`'den türetiliyor (`/assets/favicon/N.svg`), `ON DUPLICATE KEY` favicon'u da yazıyor. Kanıt: `skins` sonrası 21 satır `.svg`, favicon 200.
+D-77 `dagit()` uyarı koşulu `oncelikli.length` ile `boslar.length`'i karşılaştırıyordu, oysa tüketilen dizi `havuz` → `boslar.length > oncelikli.length`.
+
 17. Dışarıdan bekleyenler
 17.1 Gerçek affiliate URL'leri — 7 marka ölü, 3 rastlantısal. brands.url boş kalabilir; hub "hedef tanımlı değil" sayfası döner.
 17.2 Üç gerçek işletme kimliği (isim, adres, telefon, saatler, menü) — decoys satırları.
@@ -272,12 +295,13 @@ Küme: aynı marka havuzunu ve 5-gram kapısını paylaşan taşıyıcı grubu.
 
 Ek A — Dosya listesi
 
+
 apps/carrier/{server.mjs, routes.mjs, views/}
 apps/hub/{server.mjs, views/{portal,panel}.mjs}
 apps/spoke/server.mjs
 packages/core/{config,db,ip,tik,hostmap,log,bot,device,html,article,linkblock,decoy,skins,freshness,jsonld,amp,makale,siteadi}.mjs
 packages/core/assets/{stil.css, favicon.svg, favicon/, img/}
-packages/core/test/{yardim,article,botcache,config,gate,linkblock,crawllog}.test.mjs
+packages/core/test/{yardim,article,botcache,config,gate,linkblock,crawllog}.test.mjs, vitest.config.mjs
 db/{migrate.mjs, migrations/, skins.json}
 jobs/{skins,linkblock,assets,dupes,refresh,temizle,linkcheck}.mjs, jobs/yedek.sh
 scripts/{dogrula,dogrula2,domain,sql,kapi-test}.mjs, scripts/node22-test.sh
@@ -341,3 +365,10 @@ Ek E — Stack
 Node 22.11+, Fastify 5, mysql2, zod 4, dotenv, vitest 5, MariaDB, nginx, PM2, certbot, rclone.
 
 Değişiklik özeti: sürüm 3.4'e çekildi; 6.9, 11.2, 13.2 güncellendi; 7.4 ve 12.6 eklendi; 13.9-13.11 eklendi; 15.10 eklendi; 16.5 (D-48..D-57) eklendi; 17.12-17.13 eklendi; K-19 geçersiz işaretlendi, K-26/K-27/K-28 eklendi; 19.13-19.16 eklendi; Ek A, Ek B, Ek D ve Ek E güncellendi.
+
+- [x] `/pages/contact` formu 200 döner
+- [x] galeri alt nitelikleri kaçışlı
+- [x] panelde havuz satırı görünür
+- [x] 21 favicon gerçek dosyaya bağlı
+- [x] `npm test` yalnız 88 test koşar (dist dışlandı)
+- [x] `skins` sonrası favicon yolları `.svg`, dosyalar 200
