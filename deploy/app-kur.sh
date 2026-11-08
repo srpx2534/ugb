@@ -5,10 +5,17 @@ set -euo pipefail
 : "${DB_USER:=ugb_app}"
 : "${DB_PASS:?DB_PASS gerekli}"
 : "${DB_NAME:=ugb}"
+: "${DB_PORT:=3306}"
 : "${HUB_URL:?HUB_URL gerekli}"
+: "${HUB_HOST:?HUB_HOST gerekli}"
+: "${ADMIN_PAROLA:?ADMIN_PAROLA gerekli}"
+: "${HASH_TUZU:?HASH_TUZU gerekli (openssl rand -hex 16)}"
 : "${CARRIER_HOSTLAR:?CARRIER_HOSTLAR gerekli (boslukla ayrilmis)}"
 : "${HUB_HOSTLAR:?HUB_HOSTLAR gerekli}"
 : "${SPOKE_HOSTLAR:?SPOKE_HOSTLAR gerekli}"
+: "${CARRIER_PORT:=3001}"
+: "${HUB_PORT:=3002}"
+: "${SPOKE_PORT:=3003}"
 
 apt update
 apt install -y curl ufw nginx certbot python3-certbot-nginx logrotate
@@ -29,7 +36,7 @@ cat >/srv/ugb/.env <<ENV
 NODE_ENV=prod
 SITE_ID=1
 DB_HOST=$DB_HOST
-DB_PORT=3306
+DB_PORT=$DB_PORT
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASS=$DB_PASS
@@ -38,9 +45,13 @@ HOSTMAP_TTL_MS=60000
 TRUST_PROXY=true
 BOT_ZORLA=0
 LOG_SEVIYE=info
-HUB_HOST=$(echo "$HUB_HOSTLAR" | awk '{print $1}')
+HUB_HOST=$HUB_HOST
 HUB_URL=$HUB_URL
-ADMIN_PAROLA=${ADMIN_PAROLA:?ADMIN_PAROLA gerekli}
+ADMIN_PAROLA=$ADMIN_PAROLA
+HASH_TUZU=$HASH_TUZU
+CARRIER_PORT=$CARRIER_PORT
+HUB_PORT=$HUB_PORT
+SPOKE_PORT=$SPOKE_PORT
 ENV
 chmod 600 /srv/ugb/.env
 
@@ -56,11 +67,14 @@ npm ci --omit=dev
 # cwd'deki .env kok .env'i eziyor, uygulama altinda .env birakma
 rm -f apps/*/.env
 
-# sablonu uc blok halinde doldur
+# sablonu bloklar ve portlarla doldur
 sed \
   -e "s|{{CARRIER_HOSTLAR}}|$CARRIER_HOSTLAR|" \
   -e "s|{{HUB_HOSTLAR}}|$HUB_HOSTLAR|" \
   -e "s|{{SPOKE_HOSTLAR}}|$SPOKE_HOSTLAR|" \
+  -e "s|{{CARRIER_PORT}}|$CARRIER_PORT|" \
+  -e "s|{{HUB_PORT}}|$HUB_PORT|" \
+  -e "s|{{SPOKE_PORT}}|$SPOKE_PORT|" \
   deploy/nginx.conf.tpl >/etc/nginx/sites-available/ugb
 
 ln -sf /etc/nginx/sites-available/ugb /etc/nginx/sites-enabled/ugb

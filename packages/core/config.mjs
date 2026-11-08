@@ -1,8 +1,12 @@
 // packages/core/config.mjs
 //
-// Tum ayarlar ortam degiskenlerinden okunur. Dosyada tek bir sir degeri yoktur.
-// ADMIN_PAROLA (min 12) ve HASH_TUZU (min 16) her ortamda zorunludur;
-// bos birakilirsa sema hatasi verip cikilir.
+// Tum ayarlar ortam degiskenlerinden okunur. Dosyada sabit domain, port veya
+// sir degeri yoktur.
+//   ADMIN_PAROLA (min 12), HASH_TUZU (min 16), HUB_URL, HUB_HOST her ortamda
+//   zorunludur. PORT uretimde zorunludur; dev/test'te verilmezse 3000 kullanilir.
+//
+// PORT ic (dinleme) portudur: uygulamalar ic portlarda durur, disariya 80'i
+// nginx acar. HUB_URL public adrestir, bu yuzden port tasimaz.
 //
 // Oncelik: sistem ortami > cwd/.env > kok/.env.local > kok/.env
 // Sistem ortami (pm2/systemd) hicbir dosya tarafindan ezilmez.
@@ -74,6 +78,14 @@ const hamDeger = (ad) => {
   return typeof deger === 'string' ? deger.trim() : '';
 };
 
+const zorunlu = (ad) => {
+  const deger = hamDeger(ad);
+  if (deger === '') {
+    throw new Error(`${HATA_ON_EKI} ${ad} tanimli degil. Sabit varsayilan yok, .env doldurulmali.`);
+  }
+  return deger;
+};
+
 const secenek = (ad, izinli, varsayilan) => {
   const ham = hamDeger(ad).toLowerCase();
   if (ham === '') return varsayilan;
@@ -93,6 +105,27 @@ const saatDilimi = (ad, varsayilan) => {
   return deger;
 };
 
+// Public adres: zorunlu, protokol http/https olmali, varsayilan port (80/443)
+// yaziliysa kirpilir. Boylece linklerde ":80" gibi gereksiz ek cikmaz.
+const publicAdres = (ad) => {
+  const ham = zorunlu(ad);
+
+  let u;
+  try {
+    u = new URL(ham);
+  } catch {
+    throw new Error(`${HATA_ON_EKI} ${ad} gecerli bir URL degil: ${ham}`);
+  }
+
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    throw new Error(`${HATA_ON_EKI} ${ad} http veya https ile baslamali.`);
+  }
+
+  if (u.port === '80' || u.port === '443') u.port = '';
+
+  return u.toString().replace(/\/$/, '');
+};
+
 // ---------------------------------------------------------------------------
 // Ortam
 // ---------------------------------------------------------------------------
@@ -102,8 +135,31 @@ const URETIM_MI = ORTAM === 'prod';
 const TEST_MI = ORTAM === 'test';
 
 // ---------------------------------------------------------------------------
+// Port: uretimde zorunlu (pm2 verir), dev/test'te rahat calisma icin 3000
+// ---------------------------------------------------------------------------
+
+const portCoz = () => {
+  const ham = hamDeger('PORT');
+
+  if (ham === '') {
+    if (URETIM_MI) {
+      throw new Error(`${HATA_ON_EKI} PORT tanimli degil. Uretimde pm2/systemd vermeli.`);
+    }
+    return 3000;
+  }
+
+  const sayi = Number(ham);
+  if (!Number.isInteger(sayi) || sayi < 1 || sayi > 65535) {
+    throw new Error(`${HATA_ON_EKI} PORT 1-65535 arasi tam sayi olmali (gelen: ${ham}).`);
+  }
+  return sayi;
+};
+
+const PORT = portCoz();
+
+// ---------------------------------------------------------------------------
 // Sema
-// Sirlar burada zorunlu: .default() yok, bos deger sema hatasi uretir.
+// Sirlar ve public adres burada zorunlu: .default() yok.
 // ---------------------------------------------------------------------------
 
 const bayrak = (varsayilan) => z.enum(['0', '1']).default(varsayilan);
@@ -111,7 +167,6 @@ const bayrak = (varsayilan) => z.enum(['0', '1']).default(varsayilan);
 const Sema = z.object({
   NODE_ENV: z.enum(['dev', 'test', 'prod']).default('dev'),
   SITE_ID: z.coerce.number().int().min(1).max(999).default(1),
-  PORT: z.coerce.number().int().min(1024).max(65535).default(3000),
 
   DB_HOST: z.string().min(1).max(190),
   DB_PORT: z.coerce.number().int().min(1).max(65535).default(3306),
@@ -132,8 +187,8 @@ const Sema = z.object({
   HASH_TUZU: z.string().min(16).max(190),
   LOG_SEVIYE: z.enum(['info', 'warn', 'error']).default('info'),
 
-  HUB_URL: z.string().min(8).default('http://hedefb.com:3002'),
-  HUB_HOST: z.string().min(3).default('hedefb.com'),
+  HUB_URL: z.string().min(8),
+  HUB_HOST: z.string().min(3),
   ADMIN_PAROLA: z.string().min(12).max(190),
   DIKEY: z.enum(['bonus', 'canli-mac']).default('bonus'),
 
@@ -143,7 +198,7 @@ const Sema = z.object({
   CEREZ_GUVENLI: bayrak(URETIM_MI ? '1' : '0'),
 });
 
-const sonuc = Sema.safeParse(process.env);
+const sonuc = Sema.safeParse({ ...process.env, HUB_URL: publicAdres('HUB_URL') });
 
 if (!sonuc.success) {
   console.error('env hatasi:');
@@ -151,7 +206,7 @@ if (!sonuc.success) {
   process.exit(1);
 }
 
-const env = Object.freeze(sonuc.data);
+const env = Object.freeze({ ...sonuc.data, PORT });
 
 // Geriye uyum: bu iki isim artik deger tutmuyor, env'den turetiliyor.
 // Tuketiciler dogrudan env.ADMIN_PAROLA / env.HASH_TUZU de kullanabilir.
@@ -166,26 +221,18 @@ if (env.HASH_TUZU.includes('degistir')) {
   console.warn(`${HATA_ON_EKI} HASH_TUZU hala ornek degerde: degistirilmeli.`);
 }
 
+if (URETIM_MI && env.CEREZ_GUVENLI === '0') {
+  console.warn('uyari: prod ortamda CEREZ_GUVENLI=0');
+}
+
+// HUB_URL public adrestir. Uretimde disariya yalnizca 80/443 acik oldugu icin
+// ic port yazili kalmamali. Dev ve test'te port mesrudur: hub yerelde o portta.
 if (URETIM_MI) {
-  if (env.ADMIN_PAROLA === 'PAROLAPAROLA') {
+  const hubPortu = new URL(env.HUB_URL).port;
+  if (hubPortu) {
     throw new Error(
-      '[config] Uretimde varsayilan ADMIN_PAROLA kullanilamaz.'
+      `${HATA_ON_EKI} HUB_URL ic port tasiyor (${hubPortu}), uretimde public adres portsuz olmali`
     );
-  }
-
-  if (env.HASH_TUZU === 'ugb-tuz-degistir') {
-    throw new Error(
-      '[config] Uretimde varsayilan HASH_TUZU kullanilamaz.'
-    );
-  }
-
-  if (/:3002$/.test(env.HUB_URL)) {
-    throw new Error(
-      '[config] Uretimde varsayilan HUB_URL kullanilamaz.'
-    );
-  }
-  if (env.CEREZ_GUVENLI === '0') {
-    console.warn('uyari: prod ortamda CEREZ_GUVENLI=0');
   }
 }
 

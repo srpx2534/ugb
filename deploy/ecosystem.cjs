@@ -1,6 +1,14 @@
-// PM2 surec grubu. Her uygulama kendi portunda; portlar burada sabit,
-// nginx.conf.tpl ayni portlari kullanir. Port .env'den gelmez, boylece
-// uc uygulama ayni anahtari paylasip cakismaz.
+// PM2 surec grubu. Portlar .env'den okunur, kodda sabit port yok.
+// Disariya 80'i nginx acar; buradaki portlar yalnizca 127.0.0.1 icindir.
+const path = require('node:path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+const port = (ad) => {
+  const deger = process.env[ad];
+  if (!deger) throw new Error(`[ecosystem] ${ad} tanimli degil`);
+  return String(deger);
+};
+
 module.exports = {
   apps: [
     {
@@ -9,7 +17,7 @@ module.exports = {
       script: 'server.mjs',
       instances: 1,
       max_memory_restart: '300M',
-      env: { NODE_ENV: 'prod', PORT: '3001' },
+      env: { NODE_ENV: 'prod', PORT: port('CARRIER_PORT') },
     },
     {
       name: 'hub',
@@ -17,7 +25,7 @@ module.exports = {
       script: 'server.mjs',
       instances: 1,
       max_memory_restart: '200M',
-      env: { NODE_ENV: 'prod', PORT: '3002' },
+      env: { NODE_ENV: 'prod', PORT: port('HUB_PORT') },
     },
     {
       name: 'spoke',
@@ -25,7 +33,7 @@ module.exports = {
       script: 'server.mjs',
       instances: 1,
       max_memory_restart: '200M',
-      env: { NODE_ENV: 'prod', PORT: '3003' },
+      env: { NODE_ENV: 'prod', PORT: port('SPOKE_PORT') },
     },
   ],
 };

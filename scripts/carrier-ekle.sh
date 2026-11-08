@@ -55,4 +55,4 @@ npm run --silent sql "SELECT id, host, role, kume_id, site_id, decoy_id, mobil, 
 echo
 echo "eklendi. hostmap onbellegi 60 sn icinde tazelenir; hemen test icin servisi yeniden baslat."
 echo "sonraki adim:"
-echo "  BASE=http://127.0.0.1:3001 HOST=${MOBIL_HOST} npm run bot-test"
+echo "  BASE=${BASE:-http://127.0.0.1:${CARRIER_PORT:-3001}} HOST=${MOBIL_HOST} npm run bot-test"
