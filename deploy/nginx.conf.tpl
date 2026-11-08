@@ -3,6 +3,7 @@ server_tokens off;
 # tasiyici: makale / decoy / reklam kapisi
 server {
     listen 80;
+    listen [::]:80;
     server_name {{CARRIER_HOSTLAR}};
 
     location / {
@@ -19,6 +20,7 @@ server {
 # hub: portal, /l yonlendirici, admin
 server {
     listen 80;
+    listen [::]:80;
     server_name {{HUB_HOSTLAR}};
 
     location / {
@@ -35,6 +37,7 @@ server {
 # spoke: uydu makale
 server {
     listen 80;
+    listen [::]:80;
     server_name {{SPOKE_HOSTLAR}};
 
     location / {

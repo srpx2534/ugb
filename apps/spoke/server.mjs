@@ -68,12 +68,8 @@ app.addHook('onRequest', async (istek, yanit) => {
   yanit.header('x-frame-options', 'SAMEORIGIN');
 
   istek.domain = domain;
-  istemciIpAta(istek);
-});
-
-function istemciIpAta(istek) {
   istek.istemciIp = istemciIp(istek);
-}
+});
 
 // Kok dizin disina cikilamaz: hem nokta nokta hem symlink icin gercek yol bakilir.
 app.get('/assets/*', async (istek, yanit) => {
@@ -169,7 +165,11 @@ app.get('/l/:slug', async (istek, yanit) => {
   return yanit.redirect(`${env.HUB_URL}/l/${slug}?say=0`, 302);
 });
 
-app.get('/health', async () => ({ ok: await ping(), havuz: havuzDurumu() }));
+// Havuz doygunlukta da saglikli sayilmasin (carrier ve hub ile ayni kural).
+app.get('/health', async () => {
+  const havuz = havuzDurumu();
+  return { ok: (await ping()) && !havuz.dolu, havuz };
+});
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
@@ -199,10 +199,12 @@ app.get('/sitemap.xml', async (istek, yanit) => {
 app.setErrorHandler((h, istek, yanit) => {
   if (h.mesgul) {
     yanit.header('retry-after', String(h.retryAfter ?? 2));
+    yanit.header('cache-control', 'no-store');
     log.warn('db mesgul', { yol: istek.url, sebep: h.sebep });
     yanit.code(503).send('mesgul, sonra tekrar dene');
     return;
   }
+  yanit.header('cache-control', 'no-store');
   log.error('spoke hatasi', { yol: istek.url, hata: h.message });
   yanit.code(h.statusCode ?? 500).send('hata');
 });
