@@ -1,6 +1,14 @@
 import crypto from 'node:crypto';
 import Fastify from 'fastify';
-import { env, isProd, hostGecerli, slugGecerli, hostNormalize, VARSAYILAN_PAROLA } from '@ugb/core/config';
+import {
+  env,
+  isProd,
+  hostGecerli,
+  slugGecerli,
+  hostNormalize,
+  ipGecerli,
+  VARSAYILAN_PAROLA,
+} from '@ugb/core/config';
 import { log } from '@ugb/core/log';
 import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -16,12 +24,28 @@ const DENEME_SINIR = 5;
 const DENEME_PENCERE_MS = 10 * 60 * 1000;
 const denemeler = new Map();
 
+// nginx $proxy_add_x_forwarded_for kullandigi icin soldaki deger istemci
+// tarafindan belirlenebilir. Guvenilir olan sagdaki degerdir: onu proxy yazar.
+function baslikMetni(deger) {
+  if (Array.isArray(deger)) return deger[0];
+  return deger;
+}
+
 function istemciIp(istek) {
-  if (env.TRUST_PROXY) {
-    const cf = istek.headers['cf-connecting-ip'];
-    if (cf) return cf;
-    const xff = istek.headers['x-forwarded-for'];
-    if (xff) return xff.split(',')[0].trim();
+  if (!env.TRUST_PROXY) return istek.ip;
+
+  if (env.CF_ARKADA === '1') {
+    const cf = baslikMetni(istek.headers['cf-connecting-ip']);
+    if (ipGecerli(cf)) return String(cf).trim();
+  }
+
+  const xff = baslikMetni(istek.headers['x-forwarded-for']);
+  if (xff) {
+    const parcalar = String(xff).split(',');
+    for (let i = parcalar.length - 1; i >= 0; i--) {
+      const aday = parcalar[i].trim();
+      if (ipGecerli(aday)) return aday;
+    }
   }
   return istek.ip;
 }
@@ -62,16 +86,54 @@ function denemeSifirla(ip) {
   denemeler.delete(ip);
 }
 
-// tarayici POST'ta Origin gonderir; yabanci origin CSRF demektir.
-// Origin yoksa (curl, sunucu-sunucu) Referer'a, o da yoksa gecise bakilir.
+// ---------------------------------------------------------------------------
+// Yonetim kapisi: TLS, IP izin listesi, CSRF
+// ---------------------------------------------------------------------------
+
+const IZINLI_IP = new Set(
+  String(env.HUB_IZINLI_IP ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+
+function guvenliMi(istek) {
+  if (istek.protocol === 'https') return true;
+  const xfp = baslikMetni(istek.headers['x-forwarded-proto']);
+  return String(xfp ?? '').toLowerCase() === 'https';
+}
+
+// Tarayici POST'ta her zaman Origin gonderir. Origin yoksa ve sunucudan
+// sunucuya oldugu x-ugb-istek basligiyla acikca belirtilmemisse reddedilir.
 function originGecerli(istek) {
-  const origin = istek.headers.origin;
-  const referer = istek.headers.referer;
+  const origin = baslikMetni(istek.headers.origin);
+  const referer = baslikMetni(istek.headers.referer);
   const host = istek.hostname;
   const izinli = [`https://${host}`, `http://${host}`];
 
-  if (origin) return izinli.includes(origin.replace(/\/$/, ''));
-  if (referer) return izinli.some((x) => referer.startsWith(x + '/') || referer === x);
+  if (origin) return izinli.includes(String(origin).replace(/\/$/, ''));
+
+  if (referer) {
+    const r = String(referer);
+    return izinli.some((x) => r === x || r.startsWith(x + '/'));
+  }
+
+  return baslikMetni(istek.headers['x-ugb-istek']) === '1';
+}
+
+// true donerse devam edilir, false donerse yanit zaten gonderilmistir.
+function yonetimKapi(istek, yanit) {
+  if (env.HUB_HTTPS_ZORLA === '1' && !guvenliMi(istek)) {
+    yanit.header('cache-control', 'no-store');
+    yanit.redirect(`https://${istek.hostname}${istek.url}`, 308);
+    return false;
+  }
+
+  if (IZINLI_IP.size > 0 && !IZINLI_IP.has(istek.istemciIp)) {
+    yanit.code(403).send('ip izinli degil');
+    return false;
+  }
+
   return true;
 }
 
@@ -157,16 +219,19 @@ app.get('/l/:slug', async (istek, yanit) => {
 });
 
 app.get('/admin', async (istek, yanit) => {
+  if (!yonetimKapi(istek, yanit)) return;
   if (!kapi(istek, yanit)) return;
+
   const domainler = await q('SELECT id, host, role, aktif FROM domains ORDER BY id');
   const sayim = await q('SELECT domain_id, COUNT(*) AS n FROM clicks GROUP BY domain_id');
   const tiklama = Object.fromEntries(sayim.map((s) => [s.domain_id, s.n]));
   yanit.type('text/html; charset=utf-8');
-  return panel({ domainler, tiklama });
+  return panel({ domainler, tiklama, havuz: havuzDurumu() });
 });
 
 // elle kapatma isaretlenir; linkcheck bunu ezmez
 app.post('/admin/domain/:id/durum', async (istek, yanit) => {
+  if (!yonetimKapi(istek, yanit)) return;
   if (!originGecerli(istek)) {
     yanit.code(403).send('yabanci origin');
     return;
@@ -178,7 +243,10 @@ app.post('/admin/domain/:id/durum', async (istek, yanit) => {
   return yanit.redirect('/admin', 303);
 });
 
-app.get('/health', async () => ({ ok: await ping(), havuz: havuzDurumu() }));
+app.get('/health', async () => {
+  const havuz = havuzDurumu();
+  return { ok: (await ping()) && !havuz.dolu, havuz };
+});
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
@@ -204,6 +272,10 @@ app.setErrorHandler((h, istek, yanit) => {
 
 if (isProd && env.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
   log.warn('ADMIN_PAROLA varsayilan degerde', { cozum: '.env icinde degistir' });
+}
+
+if (isProd && env.HUB_HTTPS_ZORLA === '1') {
+  log.info('yonetim HTTPS zorunlu', { izinliIp: IZINLI_IP.size || 'sinirsiz' });
 }
 
 await hostmapTazele().catch((e) => log.warn('hostmap', { hata: e.message }));

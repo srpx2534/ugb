@@ -186,7 +186,7 @@ const Sema = z.object({
   CRAWL_LOG_ARALIK_MS: z.coerce.number().int().min(250).max(10000).default(1000),
   CRAWL_LOG_KUYRUK: z.coerce.number().int().min(200).max(20000).default(3000),
   CRAWL_LOG_SAKLAMA_GUN: z.coerce.number().int().min(1).max(90).default(14),
-  
+
   HOSTMAP_TTL_MS: z.coerce.number().int().min(5000).max(600000).default(60000),
   TRUST_PROXY: z
     .string()
@@ -203,6 +203,9 @@ const Sema = z.object({
   HUB_HOST: z.string().min(3),
   ADMIN_PAROLA: z.string().min(12).max(190),
   DIKEY: z.enum(['bonus', 'canli-mac']).default('bonus'),
+
+  HUB_HTTPS_ZORLA: bayrak(URETIM_MI ? '1' : '0'),
+  HUB_IZINLI_IP: z.string().default(''),
 
   SITE_SAAT_DILIMI: z.string().default(saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul')),
   GUNCELLEME_MIN_DK: z.coerce.number().int().min(0).max(1440).default(5),
