@@ -38,6 +38,14 @@ function ozet(icerik) {
   return crypto.createHash('sha256').update(icerik).digest('hex');
 }
 
+// Uretimde onay: semayi veya kayitlari degistiren her komut --evet ister.
+function onay(aciklama) {
+  if (process.env.NODE_ENV === 'prod' && !EVET) {
+    console.error(`uretim ortami: ${aciklama}, onay icin --evet ekle`);
+    process.exit(2);
+  }
+}
+
 // Isaretci kendi satirinda olmak zorunda. Ileri blok ondan once, geri blok sonra.
 function bol(icerik) {
   const i = icerik.indexOf('\n' + ISARET);
@@ -92,10 +100,7 @@ async function up() {
       continue;
     }
 
-    if (process.env.NODE_ENV === 'prod' && !EVET) {
-      console.error('uretim ortami: onay icin --evet ekle');
-      process.exit(2);
-    }
+    onay(`${ad} uygulanacak`);
 
     const { ileri } = bol(icerik);
     console.log(`uygulaniyor: ${ad}`);
@@ -124,10 +129,7 @@ async function down() {
 
   const { geri } = bol(icerik);
 
-  if (process.env.NODE_ENV === 'prod' && !EVET) {
-    console.error(`uretim ortami: ${son.ad} geri alinacak, onay icin --evet ekle`);
-    process.exit(2);
-  }
+  onay(`${son.ad} geri alinacak`);
 
   console.log(`geri aliniyor: ${son.ad}`);
   await bag.query(geri);
@@ -159,16 +161,27 @@ async function eksikSil() {
   const gecmis = await uygulanan();
   const eksik = gecmis.filter((g) => !hepsi.has(g.ad));
   if (!eksik.length) { console.log('eksik kayit yok'); return; }
+
+  onay(`${eksik.length} dosyasi olmayan kayit silinecek`);
+
   for (const g of eksik) {
     await bag.query('DELETE FROM schema_migrations WHERE ad = ?', [g.ad]);
     console.log(`silindi: ${g.ad}`);
   }
 }
 
-async function checksumYenile(ad) {
-  if (!ad) throw new Error('dosya adi gerekli: node db/migrate.mjs checksum-yenile 0001_init.sql');
+async function checksumYenile(adHam) {
+  if (!adHam) throw new Error('dosya adi gerekli: node db/migrate.mjs checksum-yenile 0001_init.sql');
+
+  // Yol tasimayan ad kabul edilir; aksi halde migrations/ disi dosya hash'lenir.
+  const ad = path.basename(adHam);
+  if (ad !== adHam) throw new Error(`dosya adi yol tasimamali (ornek: 0001_init.sql), gelen: ${adHam}`);
+
   const yol = path.join(KLASOR, ad);
   const icerik = await fs.readFile(yol, 'utf8');
+
+  onay(`${ad} checksum'i yenilenecek`);
+
   const [s] = await bag.query('UPDATE schema_migrations SET checksum = ? WHERE ad = ?', [ozet(icerik), ad]);
   if (!s.affectedRows) throw new Error(`schema_migrations icinde kayit yok: ${ad}`);
   console.log(`checksum yenilendi: ${ad}`);

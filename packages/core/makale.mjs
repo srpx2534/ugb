@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { q, one, ins } from './db.mjs';
+import { q, one, tx } from './db.mjs';
 import { makaleUret, besGram, ortusmeOrani } from './article.mjs';
 import { log } from './log.mjs';
 
@@ -28,24 +28,50 @@ function ozet(baslik, govde) {
   return crypto.createHash('sha256').update(baslik + govde).digest('hex');
 }
 
+async function gramlariYaz(c, articleId, gramlar) {
+  for (const g of gramlar) {
+    await c.execute('INSERT IGNORE INTO article_grams (article_id, gram) VALUES (:a, :g)', {
+      a: articleId,
+      g,
+    });
+  }
+}
+
+// Tek transaction: satir + gramlar birlikte yazilir. Ayni domain icin yaris
+// varsa kaybeden taraf kazananin satirini okur ve gramlari tekrar yazmaz.
 async function sakla(domainId, seed, uretilen) {
   const gramlar = besGram(uretilen.govde);
-  const id = await ins(
-    'INSERT INTO articles (domain_id, slug, seed, baslik, aciklama, govde, content_hash) VALUES (:d, :s, :seed, :b, :a, :g, :h)',
-    {
-      d: domainId,
-      s: 'index',
-      seed,
-      b: uretilen.baslik,
-      a: uretilen.aciklama,
-      g: uretilen.govde,
-      h: ozet(uretilen.baslik, uretilen.govde),
+  const hash = ozet(uretilen.baslik, uretilen.govde);
+
+  return tx(async (c) => {
+    const [sonuc] = await c.execute(
+      `INSERT INTO articles (domain_id, slug, seed, baslik, aciklama, govde, content_hash)
+       VALUES (:d, :s, :seed, :b, :a, :g, :h)
+       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`,
+      {
+        d: domainId,
+        s: 'index',
+        seed,
+        b: uretilen.baslik,
+        a: uretilen.aciklama,
+        g: uretilen.govde,
+        h: hash,
+      }
+    );
+
+    // affectedRows 1 = gercekten eklendi. 0 = yarisi kaybettik (degisiklik yok).
+    if (sonuc.affectedRows === 1) {
+      await gramlariYaz(c, sonuc.insertId, gramlar);
+      return { yeni: true, id: sonuc.insertId };
     }
-  );
-  for (const g of gramlar) {
-    await q('INSERT IGNORE INTO article_grams (article_id, gram) VALUES (:a, :g)', { a: id, g });
-  }
-  return id;
+
+    const [satirlar] = await c.execute(
+      "SELECT id, seed, baslik, aciklama, govde FROM articles WHERE domain_id = ? AND slug = 'index'",
+      [domainId]
+    );
+
+    return { yeni: false, id: sonuc.insertId, satir: satirlar[0] ?? null };
+  });
 }
 
 async function onar(kayit, { domain, markalar, siteAdi, hubUrl }) {
@@ -56,21 +82,22 @@ async function onar(kayit, { domain, markalar, siteAdi, hubUrl }) {
     hubUrl,
   });
 
-  await q(
-    'UPDATE articles SET baslik = :b, aciklama = :a, govde = :g, content_hash = :h WHERE id = :id',
-    {
-      b: uretilen.baslik,
-      a: uretilen.aciklama,
-      g: uretilen.govde,
-      h: ozet(uretilen.baslik, uretilen.govde),
-      id: kayit.id,
-    }
-  );
+  const gramlar = besGram(uretilen.govde);
 
-  await q('DELETE FROM article_grams WHERE article_id = ?', [kayit.id]);
-  for (const g of besGram(uretilen.govde)) {
-    await q('INSERT IGNORE INTO article_grams (article_id, gram) VALUES (:a, :g)', { a: kayit.id, g });
-  }
+  await tx(async (c) => {
+    await c.execute(
+      'UPDATE articles SET baslik = :b, aciklama = :a, govde = :g, content_hash = :h, lastmod = CURRENT_TIMESTAMP WHERE id = :id',
+      {
+        b: uretilen.baslik,
+        a: uretilen.aciklama,
+        g: uretilen.govde,
+        h: ozet(uretilen.baslik, uretilen.govde),
+        id: kayit.id,
+      }
+    );
+    await c.execute('DELETE FROM article_grams WHERE article_id = ?', [kayit.id]);
+    await gramlariYaz(c, kayit.id, gramlar);
+  });
 
   log.info('makale onarildi', { host: domain.host });
   return { baslik: uretilen.baslik, aciklama: uretilen.aciklama, govde: uretilen.govde };
@@ -116,7 +143,20 @@ export async function makaleAl({ domain, markalar, siteAdi, hubUrl }) {
     log.warn('ortusme esigi asildi', { host: domain.host, oran: enIyi.toFixed(3) });
   }
 
-  await sakla(domain.id, secilen.seed, secilen.uretilen);
+  const sonuc = await sakla(domain.id, secilen.seed, secilen.uretilen);
+
+  if (!sonuc.yeni) {
+    const satir = sonuc.satir;
+
+    if (satir?.aciklama) {
+      log.info('yaris kaybedildi, mevcut makale kullanildi', { host: domain.host });
+      return { baslik: satir.baslik, aciklama: satir.aciklama, govde: satir.govde };
+    }
+
+    // Eski/bozuk satirsa onarilir
+    if (satir) return onar(satir, { domain, markalar, siteAdi, hubUrl });
+  }
+
   log.info('makale uretildi', { host: domain.host, seed: secilen.seed, oran: enIyi.toFixed(3) });
 
   return {

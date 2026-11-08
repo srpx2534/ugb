@@ -1,0 +1,67 @@
+name: kontrol
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kontrol-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kontrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.11.0, 22.x]
+
+    env:
+      # config.mjs semayi doldurur; sir degil, sabit test degerleri
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_NAME: ugb
+      DB_USER: ugb_app
+      DB_PASS: test-parola-en-az-16-karakter
+      HUB_URL: http://hedefb.com
+      HUB_HOST: hedefb.com
+      ADMIN_PAROLA: test-yonetici-parolasi
+      HASH_TUZU: test-tuzu-en-az-16-karakter
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: bagimliliklar
+        run: npm ci
+
+      - name: esbuild onayi
+        run: npm install-scripts approve esbuild || true
+
+      - name: sozdizimi
+        run: npm run check
+
+      - name: kabuk sozdizimi
+        run: |
+          for f in scripts/carrier-ekle.sh scripts/node22-test.sh scripts/dikey-degistir.sh deploy/derle.sh deploy/app-kur.sh deploy/db-kur.sh jobs/yedek.sh; do
+            bash -n "$f"
+          done
+
+      - name: birim testleri
+        run: npm test
+
+      - name: uretim bagimlilik denetimi
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: tum bagimlilik denetimi (bilgi)
+        run: npm audit || true

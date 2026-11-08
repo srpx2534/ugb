@@ -1,8 +1,6 @@
 import mysql from 'mysql2/promise';
 import { env } from './config.mjs';
 
-// Havuz tukendiginde kuyruk sinirlidir: queueLimit asilinca mysql2 hata verir,
-// boylece bellek sinirsiz buyumez ve istek 503 ile hizli doner.
 export const pool = mysql.createPool({
   host: env.DB_HOST,
   port: env.DB_PORT,
@@ -30,12 +28,6 @@ pool.on('connection', (c) => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Gecici hata tipi
-// ---------------------------------------------------------------------------
-
-// Servis ayakta ama DB tarafi nefes alamiyor. Sunucular bunu 503 + Retry-After
-// olarak cevaplar; is mantigi hatasi gibi 500'e dusmez.
 export class DbMesgul extends Error {
   constructor(sebep) {
     super(`veritabani mesgul: ${sebep.message}`);
@@ -48,12 +40,11 @@ export class DbMesgul extends Error {
   }
 }
 
-// Kuyruk doldu, baglanti kurulamadi, sorgu zaman asimi, kilit beklemesi:
-// hepsi gecici. Sozdizimi/sema hatasi gecici degildir, oldugu gibi gecer.
 const GECICI_KODLAR = new Set([
   'POOL_ENQUEUELIMIT',
   'ER_CON_COUNT_ERROR',
   'ER_LOCK_WAIT_TIMEOUT',
+  'ER_LOCK_DEADLOCK',
   'PROTOCOL_CONNECTION_LOST',
   'PROTOCOL_SEQUENCE_TIMEOUT',
   'ECONNREFUSED',
@@ -64,6 +55,10 @@ const GECICI_KODLAR = new Set([
   'EHOSTUNREACH',
 ]);
 
+// Bir kez yeniden denenir: unique anahtar yarisi deadlock uretir, tekrar
+// genellikle ON DUPLICATE dalina duser ve is biter.
+const YENIDEN_DENEN = new Set(['ER_LOCK_DEADLOCK']);
+
 function geciciMi(e) {
   if (!e) return false;
   if (e.mesgul) return true;
@@ -71,22 +66,24 @@ function geciciMi(e) {
   return /queue limit|too many connections|connect timeout|handshake inactivity/i.test(e.message ?? '');
 }
 
+const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function koru(fn) {
-  try {
-    return await fn();
-  } catch (e) {
-    if (geciciMi(e)) throw new DbMesgul(e);
-    throw e;
+  for (let deneme = 1; ; deneme++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e?.code && YENIDEN_DENEN.has(e.code) && deneme < 2) {
+        await bekle(50 + Math.floor(Math.random() * 100));
+        continue;
+      }
+      if (geciciMi(e)) throw new DbMesgul(e);
+      throw e;
+    }
   }
 }
 
 const opts = (ek) => ({ timeout: env.DB_SORGU_ZAMAN_ASIMI_MS, ...ek });
-
-const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ---------------------------------------------------------------------------
-// Sorgular
-// ---------------------------------------------------------------------------
 
 export async function q(sql, params = {}, ek = {}) {
   return koru(async () => {
@@ -105,10 +102,6 @@ export async function ins(sql, params = {}, ek = {}) {
     return sonuc.insertId;
   });
 }
-
-// ---------------------------------------------------------------------------
-// Islem ve kilit
-// ---------------------------------------------------------------------------
 
 function islemZamanAsimi() {
   let zaman;
@@ -137,13 +130,13 @@ export async function tx(fn) {
       await c.commit();
       return sonuc;
     } catch (e) {
-      // Zaman asiminda fn hala calisiyor olabilir. Baglanti serbest birakilmadan
-      // once kisa sure beklenir; aksi halde sorgu baska istege verilmis baglantiya gider.
+      // Zaman asiminda fn hala calisiyor olabilir; baglanti birakilmadan once
+      // kisa sure beklenir, aksi halde sorgu baska istege verilmis baglantiya gider.
       await Promise.race([is.catch(() => {}), bekle(1500)]);
       try {
         await c.rollback();
       } catch {
-        // baglanti kopmussa rollback de patlar, asil hatayi golgelemesin
+        // baglanti kopmussa rollback de patlar
       }
       throw e;
     } finally {
@@ -174,10 +167,6 @@ export async function withLock(ad, saniye, fn) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Durum
-// ---------------------------------------------------------------------------
-
 export async function ping() {
   try {
     const c = await pool.getConnection();
@@ -192,7 +181,6 @@ export async function ping() {
   }
 }
 
-// Saglik ucunda ve admin panelinde gosterilir: kuyruk buyuyorsa haber verir.
 export function havuzDurumu() {
   const p = pool.pool ?? {};
   return {

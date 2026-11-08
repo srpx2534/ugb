@@ -135,6 +135,8 @@ export async function ipGoogleMi(ip) {
   return botKaniti(ip, GOOGLE_CIDR, googleHostMu);
 }
 
+// Belirsizlikte (DNS cevapsiz) sec-fetch aranmaz: makale servis etmek zararsiz,
+// decoy servis etmek SEO'ya zarar verir.
 export async function botMu({ ip, ua, basliklar, gevsek = false }) {
   const u = String(ua ?? '').toLowerCase();
   if (!u) return false;
@@ -142,19 +144,19 @@ export async function botMu({ ip, ua, basliklar, gevsek = false }) {
   if (GOOGLE_UA.some((k) => u.includes(k))) {
     const kanit = await botKaniti(ip, GOOGLE_CIDR, googleHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
-    return kanit === null && gevsek && secFetchGecerli(basliklar);
+    return kanit === null && gevsek;
   }
 
   if (u.includes('bingbot')) {
     const kanit = await botKaniti(ip, BING_CIDR, bingHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
-    return kanit === null && gevsek && secFetchGecerli(basliklar);
+    return kanit === null && gevsek;
   }
 
   if (u.includes('yandexbot')) {
     const kanit = await botKaniti(ip, YANDEX_CIDR, yandexHostMu);
     if (kanit === true) return secFetchGecerli(basliklar);
-    return kanit === null && gevsek && secFetchGecerli(basliklar);
+    return kanit === null && gevsek;
   }
 
   return false;

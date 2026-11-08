@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
-import { env, hostGecerli, slugGecerli } from '@ugb/core/config';
+import { env, hostGecerli, slugGecerli, kokUrlHost } from '@ugb/core/config';
 import { istemciIp, ipHash } from '@ugb/core/ip';
 import { tikSayilirMi } from '@ugb/core/tik';
 import { log } from '@ugb/core/log';
@@ -32,6 +32,18 @@ const TUR = {
   '.woff2': 'font/woff2',
 };
 
+// Varlik kokunun gercek yolu dakikada bir tazelenir; her istekte syscall yapilmaz.
+const KOK_TTL_MS = 60000;
+let kokOnbellek = { deger: VARLIK, zaman: 0 };
+
+async function kokDizin() {
+  if (Date.now() - kokOnbellek.zaman < KOK_TTL_MS) return kokOnbellek.deger;
+  let d = VARLIK;
+  try { d = await fs.promises.realpath(VARLIK); } catch { d = VARLIK; }
+  kokOnbellek = { deger: d, zaman: Date.now() };
+  return d;
+}
+
 async function sonDegisim(domainId) {
   const satir = await one(
     "SELECT DATE_FORMAT(lastmod, '%Y-%m-%d') AS gun FROM articles WHERE domain_id = ? AND slug = 'index'",
@@ -56,16 +68,28 @@ app.addHook('onRequest', async (istek, yanit) => {
   yanit.header('x-frame-options', 'SAMEORIGIN');
 
   istek.domain = domain;
-  istek.istemciIp = istemciIp(istek);
+  istemciIpAta(istek);
 });
 
+function istemciIpAta(istek) {
+  istek.istemciIp = istemciIp(istek);
+}
+
+// Kok dizin disina cikilamaz: hem nokta nokta hem symlink icin gercek yol bakilir.
 app.get('/assets/*', async (istek, yanit) => {
   const istenen = istek.params['*'];
   const tam = path.resolve(VARLIK, istenen);
   if (tam !== VARLIK && !tam.startsWith(VARLIK + path.sep)) return yanit.code(404).send('yok');
+
+  const kok = await kokDizin();
+
+  let gercek;
+  try { gercek = await fs.promises.realpath(tam); } catch { return yanit.code(404).send('yok'); }
+  if (gercek !== kok && !gercek.startsWith(kok + path.sep)) return yanit.code(404).send('yok');
+
   try {
-    const veri = await fs.promises.readFile(tam);
-    yanit.type(TUR[path.extname(tam).toLowerCase()] ?? 'application/octet-stream');
+    const veri = await fs.promises.readFile(gercek);
+    yanit.type(TUR[path.extname(gercek).toLowerCase()] ?? 'application/octet-stream');
     yanit.header('cache-control', 'public, max-age=86400');
     return yanit.send(veri);
   } catch {
@@ -91,7 +115,8 @@ app.get('/', async (istek, yanit) => {
   const linkler = await linkBlokUret(d.id, d.seed ?? d.es_seed ?? 1);
   const blok = linkBlokRender(linkler);
 
-  const canonical = `https://${d.host}/`;
+  // Canonical kok host'tan: www. ve m. soyulur (carrier ile ayni kural).
+  const canonical = `https://${kokUrlHost(d.host)}/`;
   const modified = guncelleme();
   const ld = articleLd({
     baslik,

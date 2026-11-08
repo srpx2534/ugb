@@ -23,11 +23,9 @@ const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
 const DENEME_SINIR = 5;
 const DENEME_PENCERE_MS = 10 * 60 * 1000;
-// Harita sinirlidir: tavan asilinca suresi dolmus denemeler atilir.
 const DENEME_HARITA_UST = 5000;
 const denemeler = new Map();
 
-// sabit zamanli karsilastirma: uzunluk farki ve erken cikis sizdirmaz
 function zamanliEsit(a, b) {
   const x = crypto.createHash('sha256').update(String(a ?? '')).digest();
   const y = crypto.createHash('sha256').update(String(b ?? '')).digest();
@@ -43,7 +41,6 @@ function yetkili(istek) {
   return zamanliEsit(cozulmus.slice(0, i), 'admin') && zamanliEsit(cozulmus.slice(i + 1), env.ADMIN_PAROLA);
 }
 
-// yanlis denemeyi biriktirir, yeni sayaci doner
 function denemeArttir(ip) {
   const simdi = Date.now();
   const k = denemeler.get(ip);
@@ -71,10 +68,6 @@ function denemeSifirla(ip) {
   denemeler.delete(ip);
 }
 
-// ---------------------------------------------------------------------------
-// Yonetim kapisi: TLS, IP izin listesi, CSRF
-// ---------------------------------------------------------------------------
-
 const IZINLI_IP = new Set(
   String(env.HUB_IZINLI_IP ?? '')
     .split(',')
@@ -88,8 +81,6 @@ function guvenliMi(istek) {
   return String(xfp ?? '').toLowerCase() === 'https';
 }
 
-// Tarayici POST'ta her zaman Origin gonderir. Origin yoksa ve sunucudan
-// sunucuya oldugu x-ugb-istek basligiyla acikca belirtilmemisse reddedilir.
 function originGecerli(istek) {
   const origin = baslikMetni(istek.headers.origin);
   const referer = baslikMetni(istek.headers.referer);
@@ -106,7 +97,6 @@ function originGecerli(istek) {
   return baslikMetni(istek.headers['x-ugb-istek']) === '1';
 }
 
-// true donerse devam edilir, false donerse yanit zaten gonderilmistir.
 function yonetimKapi(istek, yanit) {
   if (env.HUB_HTTPS_ZORLA === '1' && !guvenliMi(istek)) {
     yanit.header('cache-control', 'no-store');
@@ -132,7 +122,6 @@ app.addHook('onRequest', async (istek, yanit) => {
   yanit.header('referrer-policy', 'strict-origin-when-cross-origin');
   yanit.header('x-frame-options', 'SAMEORIGIN');
 
-  // hub kendi domaini kapali olsa da yonetim icin cevap vermeli
   const domain =
     (await hostCoz(istek.hostname)) ??
     (await one(
@@ -148,8 +137,6 @@ app.addHook('onRequest', async (istek, yanit) => {
   istek.istemciIp = istemciIp(istek);
 });
 
-// Dogru kimlik her zaman gecer; sayac yalniz yanlislari biriktirir.
-// Sinir asilinca 401 yerine 429 ve retry-after doner.
 function kapi(istek, yanit) {
   if (yetkili(istek)) {
     denemeSifirla(istek.istemciIp);
@@ -171,12 +158,11 @@ function kapi(istek, yanit) {
 app.get('/', async (istek, yanit) => {
   const markalar = await q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
   const linkler = await linkBlokUret(istek.domain.id, istek.domain.seed ?? 1);
+  yanit.header('cache-control', 'no-store');
   yanit.type('text/html; charset=utf-8');
   return portal({ markalar, blok: linkBlokRender(linkler) });
 });
 
-// Marka listesi rakip icin degerli: varsayilan olarak kapali.
-// HUB_API_KORU=0 yapilirsa kimlik dogrulamasi istenmez.
 app.get('/api', async (istek, yanit) => {
   if (env.HUB_API_KORU === '1' && !kapi(istek, yanit)) return;
   const markalar = await q('SELECT ad, slug, teklif FROM brands WHERE aktif = 1 ORDER BY id');
@@ -184,7 +170,6 @@ app.get('/api', async (istek, yanit) => {
   return { adet: markalar.length, markalar };
 });
 
-// Zincirin ilk bacagi sayar. carrier/spoke ?say=0 ile devreder, burada tekrar sayilmaz.
 app.get('/l/:slug', async (istek, yanit) => {
   const { slug } = istek.params;
   if (!slugGecerli(slug)) return yanit.code(404).send('yok');
@@ -207,6 +192,7 @@ app.get('/l/:slug', async (istek, yanit) => {
 
   if (!marka.url) {
     const ad = kacis(marka.ad);
+    yanit.header('cache-control', 'no-store');
     yanit.type('text/html; charset=utf-8');
     return `<!doctype html><meta charset="utf-8"><title>${ad}</title><body style="font:16px system-ui;padding:40px"><h1>${ad}</h1><p>Hedef adres henüz tanımlı değil.</p></body>`;
   }
@@ -226,7 +212,6 @@ app.get('/admin', async (istek, yanit) => {
   return panel({ domainler, tiklama, havuz: havuzDurumu() });
 });
 
-// elle kapatma isaretlenir; linkcheck bunu ezmez
 app.post('/admin/domain/:id/durum', async (istek, yanit) => {
   if (!yonetimKapi(istek, yanit)) return;
   if (!originGecerli(istek)) {
@@ -289,8 +274,6 @@ if (isProd && env.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
   log.warn('ADMIN_PAROLA varsayilan degerde', { cozum: '.env icinde degistir' });
 }
 
-// IP listesi dolu ama TRUST_PROXY kapaliysa adres proxy'nin adresi olur,
-// yonetici kendi panelinden kilitlenebilir.
 if (IZINLI_IP.size > 0 && !env.TRUST_PROXY) {
   log.warn('HUB_IZINLI_IP dolu ama TRUST_PROXY kapali', {
     cozum: 'nginx arkasinda TRUST_PROXY=true olmali',

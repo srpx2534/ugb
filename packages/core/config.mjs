@@ -143,7 +143,13 @@ const publicAdres = (ad) => {
 // Ortam
 // ---------------------------------------------------------------------------
 
-const ORTAM = secenek('NODE_ENV', ['dev', 'test', 'prod'], 'dev');
+let ORTAM;
+try {
+  ORTAM = secenek('NODE_ENV', ['dev', 'test', 'prod'], 'dev');
+} catch (e) {
+  bitir([sadeMesaj(e)]);
+}
+
 const URETIM_MI = ORTAM === 'prod';
 const TEST_MI = ORTAM === 'test';
 
@@ -184,6 +190,14 @@ try {
   PORT = portCoz();
 } catch (e) {
   bitir([sadeMesaj(e)]);
+}
+
+// Saat dilimi sema kurulmadan once dogrulanir; hatasi listeye girer.
+let siteSaatDilimi;
+try {
+  siteSaatDilimi = saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul');
+} catch (e) {
+  bitir([`SITE_SAAT_DILIMI: ${sadeMesaj(e)}`]);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +255,7 @@ const Sema = z.object({
   // Uzak proxy arkasinda ya da konteynerde 0.0.0.0 gerekirse env'den verilir.
   DINLEME_HOST: z.string().min(3).max(190).default('127.0.0.1'),
 
-  SITE_SAAT_DILIMI: z.string().default(saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul')),
+  SITE_SAAT_DILIMI: z.string().default(siteSaatDilimi),
   GUNCELLEME_MIN_DK: z.coerce.number().int().min(0).max(1440).default(5),
   GUNCELLEME_MAX_DK: z.coerce.number().int().min(0).max(1440).default(45),
   CEREZ_GUVENLI: bayrak(URETIM_MI ? '1' : '0'),
@@ -258,7 +272,6 @@ try {
 const sonuc = Sema.safeParse({ ...process.env, HUB_URL: hubUrl });
 
 if (!sonuc.success) {
-  // zod 4'te path bos dizi olabilir; etiket yine okunur kalsin.
   const sorunlar = Array.isArray(sonuc.error?.issues) ? sonuc.error.issues : [];
 
   if (sorunlar.length === 0) {
@@ -276,7 +289,6 @@ if (!sonuc.success) {
 const env = Object.freeze({ ...sonuc.data, PORT, UYGULAMA });
 
 // Geriye uyum: bu iki isim artik deger tutmuyor, env'den turetiliyor.
-// Tuketiciler dogrudan env.ADMIN_PAROLA / env.HASH_TUZU de kullanabilir.
 export const VARSAYILAN_PAROLA = env.ADMIN_PAROLA;
 export const VARSAYILAN_TUZ = env.HASH_TUZU;
 
@@ -348,8 +360,6 @@ if (ACILIS_HATALARI.length > 0) bitir(ACILIS_HATALARI);
 // Yardimci: guncelleme dakikasi ve ISO 8601 damgasi
 // ---------------------------------------------------------------------------
 
-// MIN..MAX araligindan rastgele dakika. Aralik env'den gelir, boylece
-// GUNCELLEME_MIN_DK / GUNCELLEME_MAX_DK gercekten etkili olur.
 export const guncellemeDakika = () => {
   const aralik = env.GUNCELLEME_MAX_DK - env.GUNCELLEME_MIN_DK;
   return env.GUNCELLEME_MIN_DK + Math.floor(Math.random() * (aralik + 1));
@@ -379,7 +389,6 @@ const ofsetAl = (tarih, dilim) => {
   return eslesme ? eslesme[1] : '+00:00';
 };
 
-// Verilen tarihi site saat diliminde, ofsetli ISO 8601'e cevirir.
 export const zamanDamgasi = (tarih) => {
   const p = Object.fromEntries(
     parcalariAl(tarih, env.SITE_SAAT_DILIMI)
@@ -392,7 +401,6 @@ export const zamanDamgasi = (tarih) => {
   return `${p.year}-${p.month}-${p.day}T${saat}:${p.minute}:${p.second}${ofsetAl(tarih, env.SITE_SAAT_DILIMI)}`;
 };
 
-// Simdiki zamandan MIN..MAX dakika geriye dusulmus damga.
 export const sonGuncellemeDamgasi = (taban = new Date()) => {
   const fark = guncellemeDakika();
   return zamanDamgasi(new Date(taban.getTime() - fark * 60_000));
@@ -405,8 +413,6 @@ export const sonGuncellemeDamgasi = (taban = new Date()) => {
 const ETIKET = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 const TLD = /^[a-z0-9]{2,}$/;
 
-// IPv6 koseli parantezi ve varsa port birlikte cozulur. Ciplak IPv6'nin sonundaki
-// ":1" port sanilmasin diye port yalnizca tek iki nokta varsa atilir.
 export function hostNormalize(host) {
   let h = String(host ?? '').toLowerCase().trim();
   const ipv6 = h.match(/^\[([0-9a-f:.]+)\](?::[^:]*)?$/);
@@ -415,8 +421,6 @@ export function hostNormalize(host) {
   return h.replace(/\.$/, '').replace(/^www\./, '');
 }
 
-// Canonical icin: www. ve m. yalnizca kalan parca hala nokta iceriyorsa soyulur,
-// boylece "m.com" gibi tek etiketli host "com"a dusmez.
 export function kokHostNormalize(host) {
   let h = hostNormalize(host);
   while (h.startsWith('www.')) h = h.slice(4);
@@ -425,8 +429,6 @@ export function kokHostNormalize(host) {
   return h;
 }
 
-// URL icinde kullanilacak host parcasi: IPv6 paranteze alinir, aksi halde
-// "https://::1/" gibi gecersiz adres cikar
 export function kokUrlHost(host) {
   const h = kokHostNormalize(host);
   return h.includes(':') ? `[${h}]` : h;
