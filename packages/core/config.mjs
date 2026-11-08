@@ -167,11 +167,22 @@ if (env.HASH_TUZU.includes('degistir')) {
 }
 
 if (URETIM_MI) {
-  if (/:3002$/.test(env.HUB_URL)) {
-    console.warn(`uyari: prod ortamda HUB_URL varsayilan portlu (${env.HUB_URL})`);
+  if (env.ADMIN_PAROLA === 'PAROLAPAROLA') {
+    throw new Error(
+      '[config] Uretimde varsayilan ADMIN_PAROLA kullanilamaz.'
+    );
   }
-  if (env.CF_ARKADA === '1' && !env.TRUST_PROXY) {
-    console.warn('uyari: CF_ARKADA=1 ama TRUST_PROXY kapali');
+
+  if (env.HASH_TUZU === 'ugb-tuz-degistir') {
+    throw new Error(
+      '[config] Uretimde varsayilan HASH_TUZU kullanilamaz.'
+    );
+  }
+
+  if (/:3002$/.test(env.HUB_URL)) {
+    throw new Error(
+      '[config] Uretimde varsayilan HUB_URL kullanilamaz.'
+    );
   }
   if (env.CEREZ_GUVENLI === '0') {
     console.warn('uyari: prod ortamda CEREZ_GUVENLI=0');
