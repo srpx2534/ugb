@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { env, isProd, hostGecerli, ipGecerli, kokUrlHost } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
-import { q, ping, close } from '@ugb/core/db';
+import { q, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { botMu } from '@ugb/core/bot';
 import { mobilMi } from '@ugb/core/device';
@@ -104,6 +104,7 @@ app.addHook('onResponse', async (istek, yanit) => {
       }
     );
   } catch (e) {
+    // kayit basarisiz olsa da yanit coktan gitti; gecici hatayi yut
     log.error('crawl_log', { hata: e.message, host: istek.hostname });
   }
 });
@@ -120,12 +121,30 @@ app.get('/health', async (istek) => {
     mobil: istek.mobil ?? false,
     makale: istek.makale ?? false,
     reklam: istek.reklam ?? false,
+    havuz: havuzDurumu(),
   };
 });
 
 app.register(kayitlar);
 
 app.setErrorHandler(async (h, istek, yanit) => {
+  if (h.mesgul) {
+    yanit.header('retry-after', String(h.retryAfter ?? 2));
+    yanit.header('cache-control', 'no-store');
+    yanit.code(503).type('text/html; charset=utf-8');
+    log.warn('db mesgul', { yol: istek.url, sebep: h.sebep });
+
+    let yol;
+    try { yol = encodeURI(istek.url); } catch { yol = istek.url; }
+
+    try {
+      const d = await decoyCoz(istek.domain?.decoy_id ?? istek.domain?.es_decoy_id ?? null);
+      return yanit.send(hata(d, `https://${kokUrlHost(istek.hostname)}${yol}`, 503));
+    } catch {
+      return yanit.send('<h1>503</h1>');
+    }
+  }
+
   log.error('istek hatasi', { yol: istek.url, hata: h.message });
   const kod = h.statusCode ?? 500;
   if (!istek.domain || kod === 400) {

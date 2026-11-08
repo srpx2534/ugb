@@ -174,6 +174,11 @@ const Sema = z.object({
   DB_USER: z.string().min(1).max(64),
   DB_PASS: z.string().min(16),
   DB_POOL: z.coerce.number().int().min(1).max(50).default(10),
+  DB_QUEUE_LIMIT: z.coerce.number().int().min(1).max(500).default(40),
+  DB_BAGLANTI_ZAMAN_ASIMI_MS: z.coerce.number().int().min(500).max(30000).default(3000),
+  DB_SORGU_ZAMAN_ASIMI_MS: z.coerce.number().int().min(250).max(30000).default(3000),
+  DB_ISLEM_ZAMAN_ASIMI_MS: z.coerce.number().int().min(500).max(60000).default(8000),
+  DB_RETRY_AFTER_SN: z.coerce.number().int().min(1).max(60).default(2),
 
   HOSTMAP_TTL_MS: z.coerce.number().int().min(5000).max(600000).default(60000),
   TRUST_PROXY: z

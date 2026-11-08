@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { env, hostGecerli, slugGecerli } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
-import { q, one, ping, close } from '@ugb/core/db';
+import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { skinCoz } from '@ugb/core/skins';
 import { siteAdi } from '@ugb/core/siteadi';
@@ -146,7 +146,7 @@ app.get('/l/:slug', async (istek, yanit) => {
   return yanit.redirect(`${env.HUB_URL}/l/${slug}?say=0`, 302);
 });
 
-app.get('/health', async () => ({ ok: await ping() }));
+app.get('/health', async () => ({ ok: await ping(), havuz: havuzDurumu() }));
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
@@ -160,6 +160,12 @@ app.get('/sitemap.xml', async (istek, yanit) => {
 });
 
 app.setErrorHandler((h, istek, yanit) => {
+  if (h.mesgul) {
+    yanit.header('retry-after', String(h.retryAfter ?? 2));
+    log.warn('db mesgul', { yol: istek.url, sebep: h.sebep });
+    yanit.code(503).send('mesgul, sonra tekrar dene');
+    return;
+  }
   log.error('spoke hatasi', { yol: istek.url, hata: h.message });
   yanit.code(h.statusCode ?? 500).send('hata');
 });

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import { env, isProd, hostGecerli, slugGecerli, hostNormalize, VARSAYILAN_PAROLA } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
-import { q, one, ping, close } from '@ugb/core/db';
+import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
 import { sitemap } from '@ugb/core/html';
@@ -178,7 +178,7 @@ app.post('/admin/domain/:id/durum', async (istek, yanit) => {
   return yanit.redirect('/admin', 303);
 });
 
-app.get('/health', async () => ({ ok: await ping() }));
+app.get('/health', async () => ({ ok: await ping(), havuz: havuzDurumu() }));
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
@@ -191,9 +191,15 @@ app.get('/sitemap.xml', async (istek, yanit) => {
   return sitemap(['/'], `https://${istek.hostname}`, istanbulIso(new Date()).slice(0, 10));
 });
 
-app.setErrorHandler((hata, istek, yanit) => {
-  log.error('hub hatasi', { yol: istek.url, hata: hata.message });
-  yanit.code(hata.statusCode ?? 500).send('hata');
+app.setErrorHandler((h, istek, yanit) => {
+  if (h.mesgul) {
+    yanit.header('retry-after', String(h.retryAfter ?? 2));
+    log.warn('db mesgul', { yol: istek.url, sebep: h.sebep });
+    yanit.code(503).send('mesgul, sonra tekrar dene');
+    return;
+  }
+  log.error('hub hatasi', { yol: istek.url, hata: h.message });
+  yanit.code(h.statusCode ?? 500).send('hata');
 });
 
 if (isProd && env.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
