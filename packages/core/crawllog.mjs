@@ -1,12 +1,15 @@
-import { pool } from './db.mjs';
+import { q } from './db.mjs';
 import { env } from './config.mjs';
 import { log } from './log.mjs';
 
 // Istek yolunda DB'ye yazilmaz: kayit bellekte biriktirilir, toplu INSERT ile
 // bosaltilir. Boylece trafik artisi dogrudan DB yazma sayisina donusmez.
+//
+// Yazim q() uzerinden yapilir; boylece havuz mesgul oldugunda DbMesgul firlar
+// ve parti kaybolmadan geri kuyruga konur.
 
 const KUYRUK = [];
-const DURUM = { yazilan: 0, atilan: 0, hata: 0, sonHata: null, kuyruk: 0 };
+const DURUM = { yazilan: 0, atilan: 0, hata: 0, sonHata: null };
 
 let calisiyor = false;
 let zamanlayici = null;
@@ -36,8 +39,7 @@ function bosalt() {
     degerler.push(k.domain_id, k.ip, k.ua, k.yol, k.durum, k.bot, k.mobil);
   }
 
-  pool
-    .query(`INSERT INTO crawl_log ${SUTUNLAR} VALUES ${yer}`, degerler)
+  q(`INSERT INTO crawl_log ${SUTUNLAR} VALUES ${yer}`, degerler)
     .then(() => {
       DURUM.yazilan += parti.length;
     })
@@ -51,6 +53,7 @@ function bosalt() {
         KUYRUK.unshift(...parti);
       } else {
         DURUM.atilan += parti.length;
+        if (!e.mesgul) log.warn('crawl_log yazilamadi', { hata: e.message });
       }
     })
     .finally(() => {
@@ -69,7 +72,6 @@ export function crawlLogEkle(kayit) {
   }
 
   KUYRUK.push(kayit);
-  DURUM.kuyruk = KUYRUK.length;
 
   if (KUYRUK.length >= env.CRAWL_LOG_TOPLU) bosalt();
 }
@@ -91,11 +93,11 @@ async function temizle() {
 
   for (let tur = 0; tur < 20; tur++) {
     try {
-      const [s] = await pool.query(
+      const s = await q(
         'DELETE FROM crawl_log WHERE created_at < NOW() - INTERVAL ? DAY LIMIT 5000',
         [gun]
       );
-      if (s.affectedRows < 5000) return;
+      if ((s.affectedRows ?? 0) < 5000) return;
     } catch (e) {
       log.warn('crawl_log temizlik', { hata: e.message });
       return;
@@ -115,7 +117,7 @@ export function crawlLogBaslat() {
   temizlikZamanlayici.unref();
 }
 
-// Kapanista cagrilir: kalan partiyi yazmayi dener, en fazla bir tur bekler.
+// Kapanista cagrilir: kalan partiyi yazmayi dener.
 export async function crawlLogDurdur() {
   if (zamanlayici) clearInterval(zamanlayici);
   if (temizlikZamanlayici) clearInterval(temizlikZamanlayici);

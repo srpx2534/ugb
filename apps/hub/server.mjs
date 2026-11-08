@@ -31,8 +31,16 @@ function baslikMetni(deger) {
   return deger;
 }
 
+// TRUST_PROXY kapaliyken gelen adres IPv4-mapped IPv6 olabilir
+// (::ffff:1.2.3.4). IPv4 izin listesiyle eslesmesi icin sadelestirilir.
+function ipSade(ip) {
+  const s = String(ip ?? '').trim();
+  const m = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(s);
+  return m ? m[1] : s;
+}
+
 function istemciIp(istek) {
-  if (!env.TRUST_PROXY) return istek.ip;
+  if (!env.TRUST_PROXY) return ipSade(istek.ip);
 
   if (env.CF_ARKADA === '1') {
     const cf = baslikMetni(istek.headers['cf-connecting-ip']);
@@ -47,7 +55,7 @@ function istemciIp(istek) {
       if (ipGecerli(aday)) return aday;
     }
   }
-  return istek.ip;
+  return ipSade(istek.ip);
 }
 
 function ipHash(ip) {
@@ -87,13 +95,44 @@ function denemeSifirla(ip) {
 }
 
 // ---------------------------------------------------------------------------
+// Tiklama sismesi: ayni IP ayni slug icin dakikada en fazla 3 kez sayilir
+// ---------------------------------------------------------------------------
+
+const TIK_PENCERE_MS = 60 * 1000;
+const TIK_UST = 3;
+const TIK_HARITA_UST = 5000;
+const tikSayac = new Map();
+
+function tikSayilirMi(anahtar) {
+  const simdi = Date.now();
+  const kayit = tikSayac.get(anahtar);
+
+  if (!kayit || simdi > kayit.bitis) {
+    if (tikSayac.size >= TIK_HARITA_UST) {
+      for (const [k, v] of tikSayac) if (simdi > v.bitis) tikSayac.delete(k);
+      while (tikSayac.size >= TIK_HARITA_UST) {
+        const ilk = tikSayac.keys().next().value;
+        if (ilk === undefined) break;
+        tikSayac.delete(ilk);
+      }
+    }
+    tikSayac.set(anahtar, { adet: 1, bitis: simdi + TIK_PENCERE_MS });
+    return true;
+  }
+
+  if (kayit.adet >= TIK_UST) return false;
+  kayit.adet += 1;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Yonetim kapisi: TLS, IP izin listesi, CSRF
 // ---------------------------------------------------------------------------
 
 const IZINLI_IP = new Set(
   String(env.HUB_IZINLI_IP ?? '')
     .split(',')
-    .map((s) => s.trim())
+    .map((s) => ipSade(s))
     .filter(Boolean)
 );
 
@@ -129,7 +168,7 @@ function yonetimKapi(istek, yanit) {
     return false;
   }
 
-  if (IZINLI_IP.size > 0 && !IZINLI_IP.has(istek.istemciIp)) {
+  if (IZINLI_IP.size > 0 && !IZINLI_IP.has(ipSade(istek.istemciIp))) {
     yanit.code(403).send('ip izinli degil');
     return false;
   }
@@ -198,7 +237,7 @@ app.get('/l/:slug', async (istek, yanit) => {
   const marka = await one('SELECT id, ad, url FROM brands WHERE slug = ? AND aktif = 1', [slug]);
   if (!marka) return yanit.code(404).send('yok');
 
-  if (istek.query.say !== '0') {
+  if (istek.query.say !== '0' && tikSayilirMi(`${istek.domain.id}:${slug}:${ipHash(istek.istemciIp)}`)) {
     try {
       await q(
         'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
@@ -272,6 +311,14 @@ app.setErrorHandler((h, istek, yanit) => {
 
 if (isProd && env.ADMIN_PAROLA === VARSAYILAN_PAROLA) {
   log.warn('ADMIN_PAROLA varsayilan degerde', { cozum: '.env icinde degistir' });
+}
+
+// IP listesi dolu ama TRUST_PROXY kapaliysa adres proxy'nin adresi olur,
+// yonetici kendi panelinden kilitlenebilir.
+if (IZINLI_IP.size > 0 && !env.TRUST_PROXY) {
+  log.warn('HUB_IZINLI_IP dolu ama TRUST_PROXY kapali', {
+    cozum: 'nginx arkasinda TRUST_PROXY=true olmali',
+  });
 }
 
 if (isProd && env.HUB_HTTPS_ZORLA === '1') {
