@@ -14,7 +14,7 @@
     "sql": "node scripts/sql.mjs",
     "domain": "node scripts/domain.mjs",
     "linkcheck": "node jobs/linkcheck.mjs",
-    "check": "node --check packages/core/config.mjs && node --check packages/core/db.mjs && node --check packages/core/crawllog.mjs && node --check packages/core/bot.mjs && node --check packages/core/hostmap.mjs && node --check apps/carrier/server.mjs && node --check apps/hub/server.mjs && node --check apps/spoke/server.mjs",
+    "check": "node --check packages/core/config.mjs && node --check packages/core/db.mjs && node --check packages/core/ip.mjs && node --check packages/core/tik.mjs && node --check packages/core/crawllog.mjs && node --check packages/core/bot.mjs && node --check packages/core/hostmap.mjs && node --check packages/core/freshness.mjs && node --check apps/carrier/server.mjs && node --check apps/hub/server.mjs && node --check apps/spoke/server.mjs",
     "migrate": "node db/migrate.mjs up",
     "migrate:down": "node db/migrate.mjs down",
     "migrate:durum": "node db/migrate.mjs durum",
@@ -39,5 +39,8 @@
   "devDependencies": {
     "amphtml-validator": "^1.0.38",
     "vitest": "^2.1.8"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true
   }
 }

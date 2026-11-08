@@ -32,23 +32,28 @@ ufw --force enable
 
 install -d -m 755 /srv/ugb
 
+# Parola ve adresler tirnaklanir: bosluk, $ veya # iceren deger .env'i bozmaz.
 cat >/srv/ugb/.env <<ENV
 NODE_ENV=prod
 SITE_ID=1
-DB_HOST=$DB_HOST
+DB_HOST=$(printf '%q' "$DB_HOST")
 DB_PORT=$DB_PORT
-DB_NAME=$DB_NAME
-DB_USER=$DB_USER
-DB_PASS=$DB_PASS
+DB_NAME=$(printf '%q' "$DB_NAME")
+DB_USER=$(printf '%q' "$DB_USER")
+DB_PASS=$(printf '%q' "$DB_PASS")
 DB_POOL=10
+DB_QUEUE_LIMIT=40
 HOSTMAP_TTL_MS=60000
 TRUST_PROXY=true
+DINLEME_HOST=127.0.0.1
 BOT_ZORLA=0
 LOG_SEVIYE=info
-HUB_HOST=$HUB_HOST
-HUB_URL=$HUB_URL
-ADMIN_PAROLA=$ADMIN_PAROLA
-HASH_TUZU=$HASH_TUZU
+HUB_HOST=$(printf '%q' "$HUB_HOST")
+HUB_URL=$(printf '%q' "$HUB_URL")
+ADMIN_PAROLA=$(printf '%q' "$ADMIN_PAROLA")
+HASH_TUZU=$(printf '%q' "$HASH_TUZU")
+HUB_HTTPS_ZORLA=1
+HUB_API_KORU=1
 CARRIER_PORT=$CARRIER_PORT
 HUB_PORT=$HUB_PORT
 SPOKE_PORT=$SPOKE_PORT

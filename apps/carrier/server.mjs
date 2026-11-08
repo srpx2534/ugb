@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { crawlLogEkle, crawlLogBaslat, crawlLogDurdur, crawlLogDurum } from '@ugb/core/crawllog';
-import { env, isProd, hostGecerli, ipGecerli, kokUrlHost } from '@ugb/core/config';
+import { env, isProd, hostGecerli, kokUrlHost } from '@ugb/core/config';
+import { istemciIp } from '@ugb/core/ip';
 import { log } from '@ugb/core/log';
 import { ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -14,30 +15,6 @@ import { hata } from './views/hata.mjs';
 const app = Fastify({ trustProxy: env.TRUST_PROXY ? 1 : false, logger: false });
 
 const KAYITSIZ_YOLLAR = new Set(['/health', '/favicon.ico', '/robots.txt', '/sitemap.xml']);
-
-function baslikMetni(deger) {
-  if (Array.isArray(deger)) return deger[0];
-  return deger;
-}
-
-function istemciIp(istek) {
-  if (!env.TRUST_PROXY) return istek.ip;
-
-  if (env.CF_ARKADA === '1') {
-    const cf = baslikMetni(istek.headers['cf-connecting-ip']);
-    if (ipGecerli(cf)) return String(cf).trim();
-  }
-
-  const xff = baslikMetni(istek.headers['x-forwarded-for']);
-  if (xff) {
-    const parcalar = String(xff).split(',');
-    for (let i = parcalar.length - 1; i >= 0; i--) {
-      const aday = parcalar[i].trim();
-      if (ipGecerli(aday)) return aday;
-    }
-  }
-  return istek.ip;
-}
 
 // ?m=1 mobil surumu zorlar, ?m=0 masaustu surumu zorlar.
 // iPadOS ve in-app tarayicilar masaustu UA gonderdigi icin gerekli.
@@ -168,8 +145,8 @@ if (isProd && !env.TRUST_PROXY) {
   log.warn('TRUST_PROXY kapali: nginx arkasinda bot tespiti 127.0.0.1 gorur', { cozum: '.env icinde TRUST_PROXY=true' });
 }
 
-await app.listen({ port: env.PORT, host: '0.0.0.0' });
-log.info('carrier ayakta', { port: env.PORT });
+await app.listen({ port: env.PORT, host: env.DINLEME_HOST });
+log.info('carrier ayakta', { port: env.PORT, host: env.DINLEME_HOST });
 
 for (const sinyal of ['SIGINT', 'SIGTERM']) {
   process.on(sinyal, async () => {

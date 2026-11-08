@@ -223,6 +223,10 @@ const Sema = z.object({
   HUB_IZINLI_IP: z.string().default(''),
   HUB_API_KORU: bayrak('1'),
 
+  // nginx ayni makinede oldugu icin varsayilan geri besleme adresi.
+  // Uzak proxy arkasinda ya da konteynerde 0.0.0.0 gerekirse env'den verilir.
+  DINLEME_HOST: z.string().min(3).max(190).default('127.0.0.1'),
+
   SITE_SAAT_DILIMI: z.string().default(saatDilimi('SITE_SAAT_DILIMI', 'Europe/Istanbul')),
   GUNCELLEME_MIN_DK: z.coerce.number().int().min(0).max(1440).default(5),
   GUNCELLEME_MAX_DK: z.coerce.number().int().min(0).max(1440).default(45),
@@ -299,9 +303,19 @@ export const dogrula = () => {
   return true;
 };
 
+// Acilista calisir: kontroller olu kod kalmasin, hatali env ile ayaga kalkilmasin.
+dogrula();
+
 // ---------------------------------------------------------------------------
-// Yardimci: ISO 8601 guncelleme damgasi
+// Yardimci: guncelleme dakikasi ve ISO 8601 damgasi
 // ---------------------------------------------------------------------------
+
+// MIN..MAX araligindan rastgele dakika. Aralik env'den gelir, boylece
+// GUNCELLEME_MIN_DK / GUNCELLEME_MAX_DK gercekten etkili olur.
+export const guncellemeDakika = () => {
+  const aralik = env.GUNCELLEME_MAX_DK - env.GUNCELLEME_MIN_DK;
+  return env.GUNCELLEME_MIN_DK + Math.floor(Math.random() * (aralik + 1));
+};
 
 const parcalariAl = (tarih, dilim) =>
   new Intl.DateTimeFormat('en-GB', {
@@ -327,12 +341,8 @@ const ofsetAl = (tarih, dilim) => {
   return eslesme ? eslesme[1] : '+00:00';
 };
 
-// Simdiki zamandan MIN..MAX dakika geriye dusulmus, saat dilimi ofsetli damga.
-export const sonGuncellemeDamgasi = (taban = new Date()) => {
-  const aralik = env.GUNCELLEME_MAX_DK - env.GUNCELLEME_MIN_DK;
-  const fark = env.GUNCELLEME_MIN_DK + Math.floor(Math.random() * (aralik + 1));
-  const tarih = new Date(taban.getTime() - fark * 60_000);
-
+// Verilen tarihi site saat diliminde, ofsetli ISO 8601'e cevirir.
+export const zamanDamgasi = (tarih) => {
   const p = Object.fromEntries(
     parcalariAl(tarih, env.SITE_SAAT_DILIMI)
       .filter((parca) => parca.type !== 'literal')
@@ -342,6 +352,12 @@ export const sonGuncellemeDamgasi = (taban = new Date()) => {
   const saat = p.hour === '24' ? '00' : p.hour;
 
   return `${p.year}-${p.month}-${p.day}T${saat}:${p.minute}:${p.second}${ofsetAl(tarih, env.SITE_SAAT_DILIMI)}`;
+};
+
+// Simdiki zamandan MIN..MAX dakika geriye dusulmus damga.
+export const sonGuncellemeDamgasi = (taban = new Date()) => {
+  const fark = guncellemeDakika();
+  return zamanDamgasi(new Date(taban.getTime() - fark * 60_000));
 };
 
 // ---------------------------------------------------------------------------

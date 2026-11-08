@@ -10,6 +10,8 @@
     "./crawllog": "./crawllog.mjs",
     "./hostmap": "./hostmap.mjs",
     "./log": "./log.mjs",
+    "./ip": "./ip.mjs",
+    "./tik": "./tik.mjs",
     "./bot": "./bot.mjs",
     "./device": "./device.mjs",
     "./html": "./html.mjs",

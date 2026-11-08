@@ -1,9 +1,10 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { env, hostGecerli, slugGecerli } from '@ugb/core/config';
+import { istemciIp, ipHash } from '@ugb/core/ip';
+import { tikSayilirMi } from '@ugb/core/tik';
 import { log } from '@ugb/core/log';
 import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -31,20 +32,6 @@ const TUR = {
   '.woff2': 'font/woff2',
 };
 
-function istemciIp(istek) {
-  if (env.TRUST_PROXY) {
-    const cf = istek.headers['cf-connecting-ip'];
-    if (cf) return cf;
-    const xff = istek.headers['x-forwarded-for'];
-    if (xff) return xff.split(',')[0].trim();
-  }
-  return istek.ip;
-}
-
-function ipHash(ip) {
-  return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
-}
-
 async function sonDegisim(domainId) {
   const satir = await one(
     "SELECT DATE_FORMAT(lastmod, '%Y-%m-%d') AS gun FROM articles WHERE domain_id = ? AND slug = 'index'",
@@ -63,6 +50,11 @@ app.addHook('onRequest', async (istek, yanit) => {
     yanit.code(404).send('bilinmeyen host');
     return;
   }
+
+  yanit.header('x-content-type-options', 'nosniff');
+  yanit.header('referrer-policy', 'strict-origin-when-cross-origin');
+  yanit.header('x-frame-options', 'SAMEORIGIN');
+
   istek.domain = domain;
   istek.istemciIp = istemciIp(istek);
 });
@@ -126,6 +118,8 @@ app.get('/', async (istek, yanit) => {
   });
 });
 
+// Tiklama burada sayilir; hub'a say=0 ile devredilir, hub tekrar saymaz.
+// Sinir carrier ve hub ile ayni: ayni IP ayni slug icin dakikada en fazla 3.
 app.get('/l/:slug', async (istek, yanit) => {
   const { slug } = istek.params;
   if (!slugGecerli(slug)) return yanit.code(404).send('yok');
@@ -133,13 +127,17 @@ app.get('/l/:slug', async (istek, yanit) => {
   const marka = await one('SELECT id FROM brands WHERE slug = ? AND aktif = 1', [slug]);
   if (!marka) return yanit.code(404).send('yok');
 
-  try {
-    await q(
-      'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
-      { d: istek.domain.id, b: marka.id, s: slug, h: ipHash(istek.istemciIp) }
-    );
-  } catch (e) {
-    log.error('click', { hata: e.message });
+  const hash = ipHash(istek.istemciIp);
+
+  if (tikSayilirMi(`${istek.domain.id}:${slug}:${hash}`)) {
+    try {
+      await q(
+        'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
+        { d: istek.domain.id, b: marka.id, s: slug, h: hash }
+      );
+    } catch (e) {
+      log.error('click', { hata: e.message });
+    }
   }
 
   yanit.header('cache-control', 'no-store');
@@ -150,7 +148,21 @@ app.get('/health', async () => ({ ok: await ping(), havuz: havuzDurumu() }));
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
-  return `User-agent: *\nAllow: /\nSitemap: https://${istek.hostname}/sitemap.xml\n`;
+  return [
+    'User-agent: Googlebot',
+    'Allow: /',
+    'Disallow: /l/',
+    '',
+    'User-agent: AdsBot-Google',
+    'Allow: /',
+    '',
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /l/',
+    '',
+    `Sitemap: https://${istek.hostname}/sitemap.xml`,
+    '',
+  ].join('\n');
 });
 
 app.get('/sitemap.xml', async (istek, yanit) => {
@@ -171,8 +183,8 @@ app.setErrorHandler((h, istek, yanit) => {
 });
 
 await hostmapTazele().catch((e) => log.warn('hostmap', { hata: e.message }));
-await app.listen({ port: env.PORT, host: '0.0.0.0' });
-log.info('spoke ayakta', { port: env.PORT });
+await app.listen({ port: env.PORT, host: env.DINLEME_HOST });
+log.info('spoke ayakta', { port: env.PORT, host: env.DINLEME_HOST });
 
 for (const s of ['SIGINT', 'SIGTERM']) {
   process.on(s, async () => {

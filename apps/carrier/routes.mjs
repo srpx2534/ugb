@@ -1,14 +1,15 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env, slugGecerli, kokUrlHost } from '@ugb/core/config';
+import { ipHash } from '@ugb/core/ip';
+import { tikSayilirMi } from '@ugb/core/tik';
 import { dikey } from '@ugb/core/dikey';
 import { sitemap } from '@ugb/core/html';
 import { decoyCoz } from '@ugb/core/decoy';
 import { skinCoz } from '@ugb/core/skins';
 import { siteAdi } from '@ugb/core/siteadi';
-import { guncelleme, istanbulIso } from '@ugb/core/freshness';
+import { guncelleme } from '@ugb/core/freshness';
 import { articleLd } from '@ugb/core/jsonld';
 import { makaleAl } from '@ugb/core/makale';
 import { ampSayfa } from '@ugb/core/amp';
@@ -85,34 +86,6 @@ async function kokDizin() {
   try { d = await fs.promises.realpath(VARLIK); } catch { d = VARLIK; }
   kokOnbellek = { deger: d, zaman: Date.now() };
   return d;
-}
-
-// Tiklama sismesini onlemek icin ayni anahtara dakikada en fazla 3 sayim
-const TIK_PENCERE_MS = 60 * 1000;
-const TIK_UST = 3;
-const TIK_HARITA_UST = 5000;
-const tikSayac = new Map();
-
-function tikSayilirMi(anahtar) {
-  const simdi = Date.now();
-  const kayit = tikSayac.get(anahtar);
-  if (!kayit || simdi > kayit.bitis) {
-    if (tikSayac.size >= TIK_HARITA_UST) {
-      for (const [k, v] of tikSayac) {
-        if (simdi > v.bitis) tikSayac.delete(k);
-      }
-      while (tikSayac.size >= TIK_HARITA_UST) {
-        const ilk = tikSayac.keys().next().value;
-        if (ilk === undefined) break;
-        tikSayac.delete(ilk);
-      }
-    }
-    tikSayac.set(anahtar, { adet: 1, bitis: simdi + TIK_PENCERE_MS });
-    return true;
-  }
-  if (kayit.adet >= TIK_UST) return false;
-  kayit.adet += 1;
-  return true;
 }
 
 async function markalar() {
@@ -203,10 +176,6 @@ async function bulunamadi(istek, yanit) {
   yanit.code(404).header('cache-control', 'no-store');
   yanit.type('text/html; charset=utf-8');
   return hata(await decoy(istek), `${kokUrl(istek)}${temizYol(istek)}`, 404);
-}
-
-function ipHash(ip) {
-  return crypto.createHash('sha256').update(`${env.HASH_TUZU}:${String(ip ?? '')}`).digest('hex');
 }
 
 async function varlik(istek, yanit) {

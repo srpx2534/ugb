@@ -6,9 +6,10 @@ import {
   hostGecerli,
   slugGecerli,
   hostNormalize,
-  ipGecerli,
   VARSAYILAN_PAROLA,
 } from '@ugb/core/config';
+import { baslikMetni, istemciIp, ipHash, ipSade } from '@ugb/core/ip';
+import { tikSayilirMi } from '@ugb/core/tik';
 import { log } from '@ugb/core/log';
 import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
@@ -22,45 +23,9 @@ const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
 const DENEME_SINIR = 5;
 const DENEME_PENCERE_MS = 10 * 60 * 1000;
+// Harita sinirlidir: tavan asilinca suresi dolmus denemeler atilir.
+const DENEME_HARITA_UST = 5000;
 const denemeler = new Map();
-
-// nginx $proxy_add_x_forwarded_for kullandigi icin soldaki deger istemci
-// tarafindan belirlenebilir. Guvenilir olan sagdaki degerdir: onu proxy yazar.
-function baslikMetni(deger) {
-  if (Array.isArray(deger)) return deger[0];
-  return deger;
-}
-
-// TRUST_PROXY kapaliyken gelen adres IPv4-mapped IPv6 olabilir
-// (::ffff:1.2.3.4). IPv4 izin listesiyle eslesmesi icin sadelestirilir.
-function ipSade(ip) {
-  const s = String(ip ?? '').trim();
-  const m = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(s);
-  return m ? m[1] : s;
-}
-
-function istemciIp(istek) {
-  if (!env.TRUST_PROXY) return ipSade(istek.ip);
-
-  if (env.CF_ARKADA === '1') {
-    const cf = baslikMetni(istek.headers['cf-connecting-ip']);
-    if (ipGecerli(cf)) return String(cf).trim();
-  }
-
-  const xff = baslikMetni(istek.headers['x-forwarded-for']);
-  if (xff) {
-    const parcalar = String(xff).split(',');
-    for (let i = parcalar.length - 1; i >= 0; i--) {
-      const aday = parcalar[i].trim();
-      if (ipGecerli(aday)) return aday;
-    }
-  }
-  return ipSade(istek.ip);
-}
-
-function ipHash(ip) {
-  return crypto.createHash('sha256').update(String(ip ?? '')).digest('hex');
-}
 
 // sabit zamanli karsilastirma: uzunluk farki ve erken cikis sizdirmaz
 function zamanliEsit(a, b) {
@@ -82,47 +47,28 @@ function yetkili(istek) {
 function denemeArttir(ip) {
   const simdi = Date.now();
   const k = denemeler.get(ip);
+
   if (!k || simdi - k.ilk > DENEME_PENCERE_MS) {
+    if (denemeler.size >= DENEME_HARITA_UST) {
+      for (const [anahtar, kayit] of denemeler) {
+        if (simdi - kayit.ilk > DENEME_PENCERE_MS) denemeler.delete(anahtar);
+      }
+      while (denemeler.size >= DENEME_HARITA_UST) {
+        const ilk = denemeler.keys().next().value;
+        if (ilk === undefined) break;
+        denemeler.delete(ilk);
+      }
+    }
     denemeler.set(ip, { n: 1, ilk: simdi });
     return 1;
   }
+
   k.n++;
   return k.n;
 }
 
 function denemeSifirla(ip) {
   denemeler.delete(ip);
-}
-
-// ---------------------------------------------------------------------------
-// Tiklama sismesi: ayni IP ayni slug icin dakikada en fazla 3 kez sayilir
-// ---------------------------------------------------------------------------
-
-const TIK_PENCERE_MS = 60 * 1000;
-const TIK_UST = 3;
-const TIK_HARITA_UST = 5000;
-const tikSayac = new Map();
-
-function tikSayilirMi(anahtar) {
-  const simdi = Date.now();
-  const kayit = tikSayac.get(anahtar);
-
-  if (!kayit || simdi > kayit.bitis) {
-    if (tikSayac.size >= TIK_HARITA_UST) {
-      for (const [k, v] of tikSayac) if (simdi > v.bitis) tikSayac.delete(k);
-      while (tikSayac.size >= TIK_HARITA_UST) {
-        const ilk = tikSayac.keys().next().value;
-        if (ilk === undefined) break;
-        tikSayac.delete(ilk);
-      }
-    }
-    tikSayac.set(anahtar, { adet: 1, bitis: simdi + TIK_PENCERE_MS });
-    return true;
-  }
-
-  if (kayit.adet >= TIK_UST) return false;
-  kayit.adet += 1;
-  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +127,11 @@ app.addHook('onRequest', async (istek, yanit) => {
     yanit.code(400).send('gecersiz host');
     return;
   }
+
+  yanit.header('x-content-type-options', 'nosniff');
+  yanit.header('referrer-policy', 'strict-origin-when-cross-origin');
+  yanit.header('x-frame-options', 'SAMEORIGIN');
+
   // hub kendi domaini kapali olsa da yonetim icin cevap vermeli
   const domain =
     (await hostCoz(istek.hostname)) ??
@@ -241,11 +192,13 @@ app.get('/l/:slug', async (istek, yanit) => {
   const marka = await one('SELECT id, ad, url FROM brands WHERE slug = ? AND aktif = 1', [slug]);
   if (!marka) return yanit.code(404).send('yok');
 
-  if (istek.query.say !== '0' && tikSayilirMi(`${istek.domain.id}:${slug}:${ipHash(istek.istemciIp)}`)) {
+  const hash = ipHash(istek.istemciIp);
+
+  if (istek.query.say !== '0' && tikSayilirMi(`${istek.domain.id}:${slug}:${hash}`)) {
     try {
       await q(
         'INSERT INTO clicks (domain_id, brand_id, slug, ip_hash) VALUES (:d, :b, :s, :h)',
-        { d: istek.domain.id, b: marka.id, s: slug, h: ipHash(istek.istemciIp) }
+        { d: istek.domain.id, b: marka.id, s: slug, h: hash }
       );
     } catch (e) {
       log.error('click', { hata: e.message });
@@ -293,7 +246,25 @@ app.get('/health', async () => {
 
 app.get('/robots.txt', async (istek, yanit) => {
   yanit.type('text/plain; charset=utf-8');
-  return `User-agent: *\nAllow: /\nSitemap: https://${istek.hostname}/sitemap.xml\n`;
+  return [
+    'User-agent: Googlebot',
+    'Allow: /',
+    'Disallow: /admin',
+    'Disallow: /api',
+    'Disallow: /l/',
+    '',
+    'User-agent: AdsBot-Google',
+    'Allow: /',
+    '',
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /admin',
+    'Disallow: /api',
+    'Disallow: /l/',
+    '',
+    `Sitemap: https://${istek.hostname}/sitemap.xml`,
+    '',
+  ].join('\n');
 });
 
 app.get('/sitemap.xml', async (istek, yanit) => {
@@ -330,8 +301,8 @@ if (isProd && env.HUB_HTTPS_ZORLA === '1') {
 }
 
 await hostmapTazele().catch((e) => log.warn('hostmap', { hata: e.message }));
-await app.listen({ port: env.PORT, host: '0.0.0.0' });
-log.info('hub ayakta', { port: env.PORT });
+await app.listen({ port: env.PORT, host: env.DINLEME_HOST });
+log.info('hub ayakta', { port: env.PORT, host: env.DINLEME_HOST });
 
 for (const s of ['SIGINT', 'SIGTERM']) {
   process.on(s, async () => {

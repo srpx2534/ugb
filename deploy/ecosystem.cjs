@@ -9,6 +9,8 @@ const port = (ad) => {
   return String(deger);
 };
 
+const dinleme = process.env.DINLEME_HOST || '127.0.0.1';
+
 module.exports = {
   apps: [
     {
@@ -18,7 +20,7 @@ module.exports = {
       instances: 1,
       max_memory_restart: '300M',
       kill_timeout: 8000,
-      env: { NODE_ENV: 'prod', PORT: port('CARRIER_PORT') },
+      env: { NODE_ENV: 'prod', PORT: port('CARRIER_PORT'), DINLEME_HOST: dinleme },
     },
     {
       name: 'hub',
@@ -27,7 +29,7 @@ module.exports = {
       instances: 1,
       max_memory_restart: '200M',
       kill_timeout: 8000,
-      env: { NODE_ENV: 'prod', PORT: port('HUB_PORT') },
+      env: { NODE_ENV: 'prod', PORT: port('HUB_PORT'), DINLEME_HOST: dinleme },
     },
     {
       name: 'spoke',
@@ -36,7 +38,7 @@ module.exports = {
       instances: 1,
       max_memory_restart: '200M',
       kill_timeout: 8000,
-      env: { NODE_ENV: 'prod', PORT: port('SPOKE_PORT') },
+      env: { NODE_ENV: 'prod', PORT: port('SPOKE_PORT'), DINLEME_HOST: dinleme },
     },
   ],
 };
