@@ -180,6 +180,13 @@ const Sema = z.object({
   DB_ISLEM_ZAMAN_ASIMI_MS: z.coerce.number().int().min(500).max(60000).default(8000),
   DB_RETRY_AFTER_SN: z.coerce.number().int().min(1).max(60).default(2),
 
+  CRAWL_LOG: bayrak('1'),
+  CRAWL_LOG_ORNEK: z.coerce.number().int().min(1).max(100).default(5),
+  CRAWL_LOG_TOPLU: z.coerce.number().int().min(50).max(1000).default(200),
+  CRAWL_LOG_ARALIK_MS: z.coerce.number().int().min(250).max(10000).default(1000),
+  CRAWL_LOG_KUYRUK: z.coerce.number().int().min(200).max(20000).default(3000),
+  CRAWL_LOG_SAKLAMA_GUN: z.coerce.number().int().min(1).max(90).default(14),
+  
   HOSTMAP_TTL_MS: z.coerce.number().int().min(5000).max(600000).default(60000),
   TRUST_PROXY: z
     .string()

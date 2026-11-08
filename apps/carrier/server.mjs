@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
+import { crawlLogEkle, crawlLogBaslat, crawlLogDurdur, crawlLogDurum } from '@ugb/core/crawllog';
 import { env, isProd, hostGecerli, ipGecerli, kokUrlHost } from '@ugb/core/config';
 import { log } from '@ugb/core/log';
-import { q, ping, close, havuzDurumu } from '@ugb/core/db';
+import { ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
 import { botMu } from '@ugb/core/bot';
 import { mobilMi } from '@ugb/core/device';
@@ -85,35 +86,32 @@ app.addHook('onRequest', async (istek, yanit) => {
   istek.reklam = !istek.bot && istek.mobil;
 });
 
+// Istek yolunda DB yok: kayit bellege itilir, toplu yazim crawllog tarafinda.
 app.addHook('onResponse', async (istek, yanit) => {
   if (!istek.domain) return;
   const yol = istek.url.split('?')[0].replace(/\/+$/, '') || '/';
   if (KAYITSIZ_YOLLAR.has(yol) || yol === '/assets' || yol.startsWith('/assets/')) return;
-  try {
-    await q(
-      `INSERT INTO crawl_log (domain_id, ip, ua, yol, durum, bot, mobil)
-       VALUES (:domain_id, :ip, :ua, :yol, :durum, :bot, :mobil)`,
-      {
-        domain_id: istek.domain.id,
-        ip: istek.istemciIp ?? '0.0.0.0',
-        ua: String(istek.headers['user-agent'] ?? '').slice(0, 255),
-        yol: istek.url.slice(0, 255),
-        durum: yanit.statusCode,
-        bot: istek.bot ? 1 : 0,
-        mobil: istek.mobil ? 1 : 0,
-      }
-    );
-  } catch (e) {
-    // kayit basarisiz olsa da yanit coktan gitti; gecici hatayi yut
-    log.error('crawl_log', { hata: e.message, host: istek.hostname });
-  }
+
+  crawlLogEkle({
+    domain_id: istek.domain.id,
+    ip: istek.istemciIp ?? '0.0.0.0',
+    ua: String(istek.headers['user-agent'] ?? '').slice(0, 255),
+    yol: istek.url.slice(0, 255),
+    durum: yanit.statusCode,
+    bot: istek.bot ? 1 : 0,
+    mobil: istek.mobil ? 1 : 0,
+  });
 });
 
 app.get('/health', async (istek) => {
   let db = false;
   try { db = await ping(); } catch { db = false; }
+
+  const havuz = havuzDurumu();
+
   return {
-    ok: db,
+    // havuz doygunlukta da saglikli sayilmasin
+    ok: db && !havuz.dolu,
     host: istek.hostname,
     site: istek.domain?.site_id ?? null,
     decoy: istek.domain?.decoy_id ?? istek.domain?.es_decoy_id ?? null,
@@ -121,7 +119,8 @@ app.get('/health', async (istek) => {
     mobil: istek.mobil ?? false,
     makale: istek.makale ?? false,
     reklam: istek.reklam ?? false,
-    havuz: havuzDurumu(),
+    havuz,
+    log: crawlLogDurum(),
   };
 });
 
@@ -162,6 +161,7 @@ app.setErrorHandler(async (h, istek, yanit) => {
   }
 });
 
+crawlLogBaslat();
 await hostmapTazele().catch((e) => log.warn('hostmap ilk yukleme', { hata: e.message }));
 
 if (isProd && !env.TRUST_PROXY) {
@@ -174,6 +174,7 @@ log.info('carrier ayakta', { port: env.PORT });
 for (const sinyal of ['SIGINT', 'SIGTERM']) {
   process.on(sinyal, async () => {
     await app.close();
+    await crawlLogDurdur();
     await close();
     process.exit(0);
   });

@@ -7,6 +7,7 @@
     "./siteadi": "./siteadi.mjs",
     "./config": "./config.mjs",
     "./db": "./db.mjs",
+    "./crawllog": "./crawllog.mjs",
     "./hostmap": "./hostmap.mjs",
     "./log": "./log.mjs",
     "./bot": "./bot.mjs",

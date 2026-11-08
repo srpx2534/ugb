@@ -17,6 +17,7 @@ module.exports = {
       script: 'server.mjs',
       instances: 1,
       max_memory_restart: '300M',
+      kill_timeout: 8000,
       env: { NODE_ENV: 'prod', PORT: port('CARRIER_PORT') },
     },
     {
@@ -25,6 +26,7 @@ module.exports = {
       script: 'server.mjs',
       instances: 1,
       max_memory_restart: '200M',
+      kill_timeout: 8000,
       env: { NODE_ENV: 'prod', PORT: port('HUB_PORT') },
     },
     {
@@ -33,6 +35,7 @@ module.exports = {
       script: 'server.mjs',
       instances: 1,
       max_memory_restart: '200M',
+      kill_timeout: 8000,
       env: { NODE_ENV: 'prod', PORT: port('SPOKE_PORT') },
     },
   ],
