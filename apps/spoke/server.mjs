@@ -8,6 +8,7 @@ import { tikSayilirMi } from '@ugb/core/tik';
 import { log } from '@ugb/core/log';
 import { q, one, ping, close, havuzDurumu } from '@ugb/core/db';
 import { hostCoz, hostmapTazele } from '@ugb/core/hostmap';
+import { decoyCoz } from '@ugb/core/decoy';
 import { skinCoz } from '@ugb/core/skins';
 import { siteAdi } from '@ugb/core/siteadi';
 import { guncelleme, istanbulIso } from '@ugb/core/freshness';
@@ -16,6 +17,7 @@ import { makaleAl } from '@ugb/core/makale';
 import { ampSayfa } from '@ugb/core/amp';
 import { linkBlokUret, linkBlokRender } from '@ugb/core/linkblock';
 import { sitemap } from '@ugb/core/html';
+import { hata } from './views/hata.mjs';
 
 const app = Fastify({ trustProxy: env.TRUST_PROXY, logger: false });
 
@@ -50,6 +52,10 @@ async function sonDegisim(domainId) {
     [domainId]
   );
   return satir?.gun ?? istanbulIso(new Date()).slice(0, 10);
+}
+
+function hataYolu(istek) {
+  try { return encodeURI(istek.url); } catch { return istek.url; }
 }
 
 app.addHook('onRequest', async (istek, yanit) => {
@@ -196,17 +202,49 @@ app.get('/sitemap.xml', async (istek, yanit) => {
   return sitemap(['/'], `https://${istek.hostname}`, await sonDegisim(istek.domain.id));
 });
 
-app.setErrorHandler((h, istek, yanit) => {
+// Fastify'in varsayilan JSON 404'u yerine decoy temali sayfa (carrier ile ayni).
+app.setNotFoundHandler(async (istek, yanit) => {
+  yanit.code(404).header('cache-control', 'no-store').type('text/html; charset=utf-8');
+
+  try {
+    const d = await decoyCoz(istek.domain?.decoy_id ?? istek.domain?.es_decoy_id ?? null);
+    return yanit.send(hata(d, `https://${kokUrlHost(istek.hostname)}${hataYolu(istek)}`, 404));
+  } catch {
+    return yanit.send('<h1>404</h1>');
+  }
+});
+
+app.setErrorHandler(async (h, istek, yanit) => {
+  yanit.header('cache-control', 'no-store');
+
   if (h.mesgul) {
     yanit.header('retry-after', String(h.retryAfter ?? 2));
-    yanit.header('cache-control', 'no-store');
+    yanit.code(503).type('text/html; charset=utf-8');
     log.warn('db mesgul', { yol: istek.url, sebep: h.sebep });
-    yanit.code(503).send('mesgul, sonra tekrar dene');
+
+    try {
+      const d = await decoyCoz(istek.domain?.decoy_id ?? istek.domain?.es_decoy_id ?? null);
+      return yanit.send(hata(d, `https://${kokUrlHost(istek.hostname)}${hataYolu(istek)}`, 503));
+    } catch {
+      return yanit.send('<h1>503</h1>');
+    }
+  }
+
+  const kod = h.statusCode ?? 500;
+  log.error('spoke hatasi', { yol: istek.url, hata: h.message });
+
+  if (!istek.domain || kod === 400) {
+    yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
     return;
   }
-  yanit.header('cache-control', 'no-store');
-  log.error('spoke hatasi', { yol: istek.url, hata: h.message });
-  yanit.code(h.statusCode ?? 500).send('hata');
+
+  try {
+    const d = await decoyCoz(istek.domain.decoy_id ?? istek.domain.es_decoy_id ?? null);
+    yanit.code(kod).type('text/html; charset=utf-8');
+    yanit.send(hata(d, `https://${kokUrlHost(istek.hostname)}${hataYolu(istek)}`, kod));
+  } catch {
+    yanit.code(kod).type('text/html; charset=utf-8').send(`<h1>${kod}</h1>`);
+  }
 });
 
 await hostmapTazele().catch((e) => log.warn('hostmap', { hata: e.message }));
