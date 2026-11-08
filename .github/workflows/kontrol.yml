@@ -42,11 +42,19 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      # npm ci degil: kilit Windows'ta uretildigi icin linux-x64 opsiyonel
+      # paketleri kilitten gelmiyor (npm/cli#4828). npm install platformu cozer.
       - name: bagimliliklar
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: esbuild onayi
         run: npm install-scripts approve esbuild || true
+
+      # Kilit yine de binding getirmezse acikca kurulur; testler bu olmadan duser.
+      - name: native binding
+        run: |
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" \
+            || npm install --no-save --no-audit --no-fund @rolldown/binding-linux-x64-gnu
 
       - name: sozdizimi
         run: npm run check
