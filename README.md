@@ -25,13 +25,22 @@ döndürülür.
 `apps/*` altında `.env` tutulmaz: uygulamalar kök `.env`'i okur, cwd'deki dosya
 kök dosyayı ezer.
 
+`npm ci` sonrası `esbuild` postinstall betiği engellenmişse birim testleri
+sessizce patlar:
+
+    npm install-scripts approve esbuild
+
 ## Yerel çalıştırma
 
-Portlar `.env`'de değil, başlatma anında verilir. Üç ayrı terminal:
+Portlar `.env` içindeki `CARRIER_PORT`, `HUB_PORT`, `SPOKE_PORT` değerlerinden
+gelir; uygulama kendi adını çalışma dizininden çözer. Üç ayrı terminal:
 
-    PORT=3001 node apps/carrier/server.mjs
-    PORT=3002 node apps/hub/server.mjs
-    PORT=3003 node apps/spoke/server.mjs
+    cd apps/carrier && node server.mjs
+    cd apps/hub     && node server.mjs
+    cd apps/spoke   && node server.mjs
+
+Uygulamalar varsayılan olarak `127.0.0.1` dinler (`DINLEME_HOST`). Uzak proxy ya
+da konteyner arkasında `DINLEME_HOST=0.0.0.0` verilir.
 
 İstekler `Host` başlığıyla ayrılır:
 
@@ -39,7 +48,8 @@ Portlar `.env`'de değil, başlatma anında verilir. Üç ayrı terminal:
 
 Bot dalını görmek için `x-ugb-bot: 1` (yalnız `NODE_ENV=dev`).
 
-Prod'da portlar `deploy/ecosystem.cjs` içinde sabittir.
+Prod'da portlar `.env`'de durur, `deploy/ecosystem.cjs` oradan okur,
+`deploy/nginx.conf.tpl` yer tutucularla doldurulur.
 
 ## Yapı sınırları
 
@@ -60,6 +70,7 @@ adreslerine istek gitmez. Veri `db/skins.json` snapshot'ından, görseller
     node scripts/kapi-test.mjs     # hub yonetim kapisi
     npm run dogrula                # kalite kapisi (sunucu ayakta)
     bash scripts/node22-test.sh    # tam tur, Node 22 ile
+    npm audit                      # bagimlilik zafiyetleri
 
 ## Belgeler
 

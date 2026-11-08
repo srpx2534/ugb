@@ -237,7 +237,19 @@ const sonuc = Sema.safeParse({ ...process.env, HUB_URL: publicAdres('HUB_URL') }
 
 if (!sonuc.success) {
   console.error('env hatasi:');
-  for (const i of sonuc.error.issues) console.error(`  ${i.path.join('.')}: ${i.message}`);
+
+  // zod 4'te path bos dizi olabilir; etiket yine okunur kalsin.
+  const sorunlar = Array.isArray(sonuc.error?.issues) ? sonuc.error.issues : [];
+
+  if (sorunlar.length === 0) {
+    console.error(`  ${sonuc.error?.message ?? 'bilinmeyen hata'}`);
+  } else {
+    for (const i of sorunlar) {
+      const yol = Array.isArray(i.path) && i.path.length > 0 ? i.path.join('.') : '(kok)';
+      console.error(`  ${yol}: ${i.message}`);
+    }
+  }
+
   process.exit(1);
 }
 
